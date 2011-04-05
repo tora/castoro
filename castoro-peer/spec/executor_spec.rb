@@ -17,34 +17,8 @@
 #   along with Castoro.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-require 'singleton'
-require 'castoro-peer/configurations'
+require File.dirname(__FILE__) + '/spec_helper.rb'
 
-module Castoro
-  module Peer
+describe Castoro::Peer::Executor do
 
-    class StorageServers
-      include Singleton
-
-      attr_reader :target, :alternative_hosts, :colleague_hosts
-
-      def initialize
-        c = Configurations.instance
-        hostname = c.HostnameForClient
-        storages = c.StorageHostsData
-        groups = c.StorageGroupsData
-        g = groups.select { |a| a.include? hostname }
-        g.flatten!
-        n = g.size
-        g.concat g.dup
-        i = g.index( hostname )
-        hosts = g.slice(i, n)
-        h = hosts.map { |x| storages[ x ] || x }
-        h.shift
-        @colleague_hosts = h.dup
-        @target = h.shift
-        @alternative_hosts = h
-      end
-    end
-  end
 end

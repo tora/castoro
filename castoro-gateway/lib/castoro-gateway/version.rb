@@ -4,7 +4,7 @@ module Castoro #:nodoc:
     module Version #:nodoc:
       unless defined? MAJOR
         MAJOR  = 0
-        MINOR  = 1
+        MINOR  = 2
         TINY   = 0
         PRE    = nil
 

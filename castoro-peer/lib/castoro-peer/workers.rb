@@ -18,7 +18,7 @@
 #
 
 module Castoro #:nodoc:
-  module Manipulator #:nodoc:
+  module Peer #:nodoc:
 
     class Workers < Castoro::Workers
 
@@ -30,7 +30,9 @@ module Castoro #:nodoc:
       def initialize logger, count, facade, base_dir
         super logger, count
         @facade = facade
-        @executor = Executor.new @logger, :base_directory => base_dir
+        @executor = CsmUtil.new base_dir
+        @user  = Hash.new { |h,k| h[k] = k.kind_of?(Integer) ? Etc.getpwuid(k).uid : Etc.getpwnam(k.to_s).uid }
+        @group = Hash.new { |h,k| h[k] = k.kind_of?(Integer) ? Etc.getgrgid(k).gid : Etc.getgrnam(k.to_s).gid }
       end
 
       private
@@ -53,13 +55,15 @@ module Castoro #:nodoc:
             when Protocol::Command::Mkdir
 
               # mkdir execute and response.
-              @executor.mkdir cmd.mode, cmd.user, cmd.group, cmd.source
+              @logger.info { "MKDIR #{cmd.mode},#{cmd.user},#{cmd.group},#{cmd.source}" }
+              @executor.mkdir cmd.source, cmd.mode, @user[cmd.user], @group[cmd.group]
               send_response(socket, ok_response_mkdir)
 
             when Protocol::Command::Mv
 
               # mv execute and response.
-              @executor.move cmd.mode, cmd.user, cmd.group, cmd.source, cmd.dest
+              @logger.info { "MOVE  #{cmd.mode},#{cmd.user},#{cmd.group},#{cmd.source},#{cmd.dest}" }
+              @executor.move cmd.source, cmd.dest, cmd.mode, @user[cmd.user], @group[cmd.group]
               send_response(socket, ok_response_move)
 
             else

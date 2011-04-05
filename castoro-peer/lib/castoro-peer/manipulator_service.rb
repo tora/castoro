@@ -22,14 +22,14 @@ require "yaml"
 require "sync"
 
 module Castoro #:nodoc:
-  module Manipulator #:nodoc:
+  module Peer #:nodoc:
 
     class ManipulatorError < CastoroError; end
 
     ##
     # manipulator main class.
     #
-    class Manipulator
+    class ManipulatorService
       DEFAULT_SETTINGS = {
         "logger" => " Proc.new { |logfile| Logger.new(logfile) } ",
         "user" => "root",

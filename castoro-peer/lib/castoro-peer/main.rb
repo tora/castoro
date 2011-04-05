@@ -24,53 +24,51 @@ require 'castoro-peer/configurations'
 require 'castoro-peer/command_line_options'
 require 'castoro-peer/log'
 require 'castoro-peer/daemon'
-require 'castoro-peer/signal_handlers'
+require 'castoro-peer/signal_handler'
 require 'castoro-peer/custom_condition_variable'
+
+require 'castoro-peer/basket'
+require 'castoro-peer/manipulator'
 
 module Castoro
   module Peer
 
-    PROGRAM_VERSION = 'peer-0.1.0 - 2011-03-28'
-
-    $RUN_AS_DAEMON = true
-
-    # Todo: $FATAL_ERROR_OCCURRED could be reported through a method 
-    $FATAL_ERROR_OCCURRED = false
-    $VERBOSE = false
-
     class Main
       include Singleton
-      
-      attr_accessor :mutex, :cv, :shutdown_requested, :start_requested, :stop_requested, :reload_requested
+      include SignalHandler
 
       def initialize
         # super should be called in the beginning of subclass method
 
-        @mutex = Mutex.new
-        @cv = CustomConditionVariable.new
+        @mutex              = Mutex.new
+        @cv                 = CustomConditionVariable.new
         @shutdown_requested = false
         @start_requested    = false
         @stop_requested     = false
-        @reload_requested   = false
 
-        CommandLineOptions.new
-        if $RUN_AS_DAEMON
-          Log.output = nil
-        end
-        Configurations.instance
+        @options            = CommandLineOptions.new
+
+        Log.output = nil if @options.run_as_daemon?
+        @config = Configurations.new(@options.config_file)
+
+        # refactor renessary.
+        Basket.class_variable_set :@@base_dir, @config[:basket_base_dir]
+        Csm::Request.class_variable_set :@@configurations, @config
 
         if ( Process.euid == 0 )
-          # Todo: notifies with an understandable error message if EffectiveUser is not set
-          pwnam = Etc.getpwnam( Configurations.instance.EffectiveUser )
+          # Todo: notifies with an understandable error message if effective_user is not set
+          pwnam = Etc.getpwnam @config[:effective_user]
           Process.egid = pwnam.gid
           Process.euid = pwnam.uid
         end
 
-        if $RUN_AS_DAEMON
+        if @options.run_as_daemon?
           Daemon.daemonize
           Daemon.create_pid_file
         end
-        SignalHandler.instance.main = self
+
+        # regist signal handlers.
+        regist_signal_handler
       end
 
       def start
@@ -78,7 +76,7 @@ module Castoro
         STDOUT.flush
         STDERR.flush
 
-        if $RUN_AS_DAEMON
+        if @options.run_as_daemon?
           Daemon.close_stdio
         end
         Log.notice( "Started." )
@@ -127,33 +125,19 @@ module Castoro
           end
         end
 
-        if ( @reload_requested )
-          @reload_requested = false
-          Log.notice( "Reloading..." )
-          if ( @started )
-            stop
-            sleep 0.1
-            Configurations.instance.reload
-            sleep 0.1
-            start
-          else
-            Configurations.instance.reload
-          end
-        end
       end
 
       def main_loop
         start
         @started = true
         while ( true )
-          @mutex.lock
-          until ( @shutdown_requested || @start_requested || @stop_requested || @reload_requested ) do
-            @cv.wait( @mutex )
-            sleep 1
-          end
-          process_request
-          @mutex.unlock
-          # sleep 0.01
+          @mutex.synchronize {
+            until ( @shutdown_requested || @start_requested || @stop_requested ) do
+              @cv.wait( @mutex )
+              sleep 1
+            end
+            process_request
+          }
           sleep 3
         end
       end
@@ -172,7 +156,43 @@ module Castoro
           sleep 3
         end until a.size == 0
       end
-    end
 
+      ##
+      # set flags for shutdown request.
+      #
+      def shutdown_request
+        Log.notice "Shutdown requested."
+        deal_with_request { @shutdown_requested = true }
+      end
+
+      ##
+      # set flags for start request.
+      #
+      def start_request
+        Log.notice "Start requested."
+        deal_with_request { @start_requested = true }
+      end
+
+      ##
+      # set flags for stop request.
+      #
+      def stop_request
+        Log.notice "Stop requested."
+        deal_with_request { @stop_requested = true }
+      end
+
+      private
+
+      def deal_with_request
+        # ConditionVariable.wait fails waking up if the current thread is the same as the one being waiting
+        Thread.new {
+          @mutex.synchronize { yield }
+          @cv.signal
+          sleep 0.01
+        }
+      end
+
+    end
   end
 end
+

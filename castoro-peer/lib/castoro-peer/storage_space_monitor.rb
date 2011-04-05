@@ -17,10 +17,48 @@
 #   along with Castoro.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-require 'thread'
+require 'sync'
 
-module Castoro
-  module Peer
+module Castoro #:nodoc:
+  module Peer #:nodoc:
+
+    ##
+    # The free space computational method of storage is defined.
+    #
+    module StorageSpaceMeasurable
+
+      private
+
+      ##
+      # free space is calculated.
+      #
+      # === Args
+      #
+      # +directory+::
+      #   disk space base directory.
+      #
+      def measure_space_bytes directory
+        df_ret = `#{measure_command} #{directory} 2>&1`
+        if $? == 0
+          df_ret = df_ret.split("\n").last
+          return $3.to_i if df_ret =~ /^.+(\d+) +(\d+) +(\d+) +(\d+)% +.+$/
+        end
+        nil
+      end
+
+      ##
+      # Free space display commandline is returned.
+      #
+      def measure_command
+        @measure_command ||= if RUBY_PLATFORM.include?("solaris")
+                               "DF_BLOCK_SIZE=1 /usr/gnu/bin/df"
+                             else
+                               "DF_BLOCK_SIZE=1 /bin/df"
+                             end
+      end
+
+    end
+
     ##
     # StorageSpaceMonitor
     #
@@ -28,30 +66,23 @@ module Castoro
     #
     # === Example
     #
-    # <pre>
-    # # init.
-    # m = Castoro::Peer::StorageSpaceMonitor.new "/expdsk"
+    #  # init.
+    #  m = Castoro::Peer::StorageSpaceMonitor.new "/expdsk"
     #
-    # # start
-    # m.start
+    #  # start
+    #  m.start
     #
-    # 10.times {
-    #   puts m.space_bytes # => The disk free space is displayed.
-    #   sleep 3
-    # }
+    #  10.times {
+    #    puts m.space_bytes # => The disk free space is displayed.
+    #    sleep 3
+    #  }
     #
-    # # stop
-    # m.stop 
-    # </pre>
+    #  # stop
+    #  m.stop 
     #
     class StorageSpaceMonitor
+      include StorageSpaceMeasurable
 
-      # TODO: refactor necessary.
-      @@df = if RUBY_PLATFORM.include?("solaris")
-               "DF_BLOCK_SIZE=1 /usr/gnu/bin/df"
-             else
-               "DF_BLOCK_SIZE=1 /bin/df"
-             end
       @@monitoring_interval = 60.0
 
       ##
@@ -66,7 +97,7 @@ module Castoro
         raise "directory not found - #{directory}" unless File.directory?(directory.to_s)
 
         @directory = directory.to_s
-        @locker = Mutex.new
+        @locker = Sync.new
       end
 
       ##
@@ -75,11 +106,11 @@ module Castoro
       # start monitor service.
       #
       def start
-        @locker.synchronize {
+        @locker.synchronize(:EX) {
           raise 'monitor already started.' if alive?
 
-          # first calculate.
-          @space_bytes = calculate_space_bytes
+          # first measure.
+          @space_bytes = measure_space_bytes(@directory)
 
           # fork
           @thread = Thread.fork { monitor_loop }
@@ -92,8 +123,8 @@ module Castoro
       # stop monitor service.
       #
       def stop
-        @locker.synchronize {
-          raise 'monitor already started.' unless alive?
+        @locker.synchronize(:EX) {
+          raise 'monitor already stopped.' unless alive?
           
           @thread[:dying] = true
           @thread.wakeup rescue nil
@@ -108,9 +139,10 @@ module Castoro
       # Accessor of storage space (bytes)
       #
       def space_bytes
-        raise 'monitor does not started.' unless alive?
-
-        @space_bytes
+        @locker.synchronize(:SH) {
+          raise 'monitor does not started.' unless alive?
+          @space_bytes
+        }
       end
 
       ##
@@ -118,7 +150,9 @@ module Castoro
       #
       # Return the state of alive or not alive.
       #
-      def alive?; !! @thread; end
+      def alive?
+        @locker.synchronize(:SH) { !! @thread }
+      end
 
       private
 
@@ -130,32 +164,12 @@ module Castoro
       #
       def monitor_loop
         until Thread.current[:dying]
-          @space_bytes = calculate_space_bytes
+          space_bytes = (measure_space_bytes(@directory) || @space_bytes)
+          @locker.synchronize(:EX) { @space_bytes = space_bytes }
           sleep @@monitoring_interval
         end
       end
 
-      ##
-      # calculate_space_bytes
-      #
-      # The storage space is calculated.
-      # When failing in the calculation, original value is returned.
-      #
-      def calculate_space_bytes
-        orig_space_bytes = @space_bytes
-        ret = nil
-
-        # TODO: refactor necessary.
-        df_ret = `#{@@df} #{@directory} 2>&1`
-        if $? == 0
-          df_ret = df_ret.split("\n").last
-          if df_ret =~ /^.+(\d+) +(\d+) +(\d+) +(\d+)% +.+$/
-            ret = $3.to_i
-          end
-        end
-
-        ret || orig_space_bytes     
-      end
     end
   end
 end

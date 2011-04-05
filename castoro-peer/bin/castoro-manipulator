@@ -24,9 +24,9 @@ require "optparse"
 require "pathname"
 
 require "rubygems"
-require "castoro-manipulator"
+require "castoro-peer"
 
-require "castoro-manipulator/scripts/script_runner"
+require "castoro-peer/scripts/script_runner"
 
 COMMAND_OPTIONS = {
   :start => {
@@ -146,5 +146,5 @@ rescue
   exit 1
 end
 
-Castoro::Manipulator::ScriptRunner.send(command, opt)
+Castoro::Peer::ScriptRunner.send(command, opt)
 

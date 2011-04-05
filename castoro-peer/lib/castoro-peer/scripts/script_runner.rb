@@ -17,7 +17,7 @@
 #   along with Castoro.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-require "castoro-manipulator"
+require "castoro-peer"
 
 require "erb"
 require "logger"
@@ -27,7 +27,7 @@ require "timeout"
 require "etc"
 
 module Castoro
-  module Manipulator
+  module Peer
 
     class ScriptRunner
       @@stop_timeout = 10
@@ -40,7 +40,7 @@ module Castoro
         raise "Envorinment not found - #{options[:env]}" unless config.include?(options[:env])
         config = config[options[:env]]
 
-        user = config["user"] || Manipulator::DEFAULT_SETTINGS["user"]
+        user = config["user"] || ManipulatorService::DEFAULT_SETTINGS["user"]
 
         uid = begin
                 user.kind_of?(Integer) ? Etc.getpwuid(user.to_i).uid : Etc.getpwnam(user.to_s).uid
@@ -59,7 +59,7 @@ module Castoro
           logger = if config["logger"]
                      eval(config["logger"].to_s).call(options[:log])
                    else
-                     eval(Manipulator::DEFAULT_SETTINGS["logger"]).call(options[:log])
+                     eval(ManipulatorService::DEFAULT_SETTINGS["logger"]).call(options[:log])
                    end
 
           # daemonize and create pidfile.
@@ -79,7 +79,7 @@ module Castoro
               Kernel.at_exit &dispose_proc
 
               begin
-                manipulator = Castoro::Manipulator::Manipulator.new(config, logger)
+                manipulator = Castoro::Peer::ManipulatorService.new(config, logger)
                 set_signalhandler manipulator, &dispose_proc
                 manipulator.start
                 while manipulator.alive?; sleep 3; end
@@ -92,7 +92,7 @@ module Castoro
             }
           }
         else
-          manipulator = Castoro::Manipulator::Manipulator.new(config, Logger.new(STDOUT))
+          manipulator = Castoro::Peer::ManipulatorService.new(config, Logger.new(STDOUT))
           set_signalhandler manipulator
           manipulator.start
           while manipulator.alive?; sleep 3; end
@@ -135,7 +135,7 @@ module Castoro
         confdir = File.dirname(options[:conf])
         FileUtils.mkdir_p confdir unless File.directory?(confdir)
         open(options[:conf], "w") { |f|
-          f.puts Manipulator::SETTING_TEMPLATE
+          f.puts ManipulatorService::SETTING_TEMPLATE
         }
       
       rescue => e
