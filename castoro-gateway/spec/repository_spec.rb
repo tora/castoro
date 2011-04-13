@@ -146,7 +146,6 @@ describe Castoro::Gateway::Repository do
     context "when get cache status" do
       it "cache#status should be called once." do
         @cache.stub!(:status)
-        command = Castoro::Protocol::Command::Status.new
         @cache.should_receive(:status).exactly(1)
 
         repository = Castoro::Gateway::Repository.new @logger, @config
@@ -157,8 +156,7 @@ describe Castoro::Gateway::Repository do
     context "when dump the cache" do
       it "cache#dump should be called once." do
         @cache.stub!(:dump)
-        io = STDOUT
-        command = Castoro::Protocol::Command::Dump.new
+        io = ""
         @cache.should_receive(:dump).with(io).exactly(1)
 
         repository = Castoro::Gateway::Repository.new @logger, @config

@@ -25,6 +25,7 @@ require "yaml"
 require "fileutils"
 require "timeout"
 require "etc"
+require "drb/drb"
 
 module Castoro
   class Gateway
@@ -130,17 +131,14 @@ module Castoro
       end
   
       def self.status options
-        port = options[:port].to_i
-  
-        ret = Castoro::Sender::TCP.start(Logger.new(nil), "127.0.0.1", port, 3.0) { |s|
-          s.send(Castoro::Protocol::Command::Status.new, 3.0)
-        }
+        ret = connect_to_console(options[:port].to_i) { |con| con.status }
   
         width  = ret.keys.max { |x, y| x.length <=> y.length }.length
         key_format = "%-#{width}s"
         ret.each { |k, v|
           STDOUT.puts "#{key_format % k} : #{v}"
         }
+
       rescue => e
         STDERR.puts "--- Castoro::Gateway error! - #{e.message}"
         STDERR.puts e.backtrace.join("\n\t") if options[:verbose]
@@ -148,22 +146,30 @@ module Castoro
       end
   
       def self.dump options
-        port = options[:port].to_i
-  
-        Castoro::Sender::TCP.start(Logger.new(nil), "127.0.0.1", port, 3.0) { |s|
-          s.send_and_recv_stream(Castoro::Protocol::Command::Dump.new, 3.0) { |received|
-            STDOUT.print received
-          }
+        connect_to_console(options[:port].to_i) { |con|
+          con.dump { |received| STDOUT.puts received }
           STDOUT.puts
         }
-  
-  
+
       rescue => e
         STDERR.puts "--- Castoro::Gateway error! - #{e.message}"
         STDERR.puts e.backtrace.join("\n\t") if options[:verbose]
         exit(1)
       end
   
+      def self.peers options
+        connect_to_console(options[:port].to_i) { |con|
+          con.peers.each { |k, v|
+            STDOUT.puts "#{k}: #{v}"
+          }
+        }
+
+      rescue => e
+        STDERR.puts "--- Castoro::Gateway error! - #{e.message}"
+        STDERR.puts e.backtrace.join("\n\t") if options[:verbose]
+        exit(1)
+      end
+
       private
   
       def self.init_gateway config, logger, pid_file = nil
@@ -200,6 +206,13 @@ module Castoro
   
         Process.kill(signal, pid)
         Process.waitpid2(pid) rescue nil
+      end
+
+      def self.connect_to_console port
+        DRb.start_service
+        yield DRbObject.new_with_uri "druby://:#{port}"
+      ensure
+        DRb.stop_service rescue nil
       end
     end
   end

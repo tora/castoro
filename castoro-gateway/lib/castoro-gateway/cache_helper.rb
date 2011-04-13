@@ -155,7 +155,6 @@ module Castoro
       }
     end
 
-
     ##
     # cache records is dumped.
     #
@@ -169,6 +168,20 @@ module Castoro
 
       @locker.synchronize {
         @cache.dump io
+      }
+    end
+
+    ##
+    # The peer and status hash representation is returned.
+    #
+    def peers
+      @logger.info { "peers requrest accepted." }
+
+      @locker.synchronize {
+        @cache.peers.find.inject({}) { |h,v|
+          h[v] = @cache.peers[v].status[:status] rescue 0
+          h
+        }
       }
     end
 

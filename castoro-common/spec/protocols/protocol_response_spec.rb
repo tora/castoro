@@ -136,12 +136,6 @@ describe Castoro::Protocol::Response do
     end
   end
 
-  context 'when parsed, argument for opecode set "STATUS"' do
-    it "should be able to create an instance of status response." do
-      Castoro::Protocol::Response.parse("STATUS", {"error" => nil, "condition" => "fine"}).should be_kind_of(Castoro::Protocol::Response::Status)
-    end
-  end
-
   context 'when parsed, argument for opecode set "MKDIR"' do
     it "should be able to create an instance of mkdir response." do
       Castoro::Protocol::Response.parse("MKDIR", {"error" => nil, "mode" => 1, "user" => "user100", "group" => "group100", "source" => "source100" }).should be_kind_of(Castoro::Protocol::Response::Mkdir)

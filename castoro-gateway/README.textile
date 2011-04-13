@@ -87,6 +87,21 @@ $ castoro-gateway dump
   peer2: /expdsk/2/baskets/a/9.1.1
 </pre>
 
+h3. castoro-gateway peers
+
+Command for displays the understood peers and peer-status.
+See below Usaeg.
+
+<pre>
+$ castoro-gateway peers
+peer0: 30
+peer1: 30
+peer2: 30
+peer3: 23
+peer4: 23
+peer5: 23
+</pre>
+
 h2. init.d script sample.
 
 /etc/init.d/castoro-gatewayd

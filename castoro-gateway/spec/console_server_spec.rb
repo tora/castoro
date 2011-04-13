@@ -19,24 +19,25 @@
 
 require File.dirname(__FILE__) + '/spec_helper.rb'
 
-console_port = 30150
-
 describe Castoro::Gateway::ConsoleServer do
   before do
     # the Logger
     @logger = Logger.new(nil)
 
+    @console_port = 30150
+
     # mock for repository
     @repository = mock Castoro::Gateway::Repository
     @repository.stub!(:new).and_return @repository
-    @repository.stub!(:status)
+    @repository.stub!(:status).and_return "status result"
+    @repository.stub!(:peers).and_return "peers result"
     @repository.stub!(:dump).and_return "dump result"
   end
 
   context "when initialized with the first argument set nil" do
     it "Logger#new(nil) should be called once." do
       Logger.should_receive(:new).with(nil).exactly(1)
-      @c = Castoro::Gateway::ConsoleServer.new(nil, @repository, console_port)
+      @c = Castoro::Gateway::ConsoleServer.new(nil, @repository, @console_port)
     end
 
     after do
@@ -46,11 +47,11 @@ describe Castoro::Gateway::ConsoleServer do
 
   context "when initialized" do
     before do
-      forker = Proc.new { |socket, &block|
-        block.call(socket)
+      @forker = Proc.new { |*args, &block|
+        block.call(*args)
       }
-      Castoro::Gateway::ConsoleServer.class_variable_set(:@@forker, forker)
-      @c = Castoro::Gateway::ConsoleServer.new(@logger, @repository, console_port)
+      Castoro::Gateway::ConsoleServer.class_variable_set(:@@forker, @forker)
+      @c = Castoro::Gateway::ConsoleServer.new(@logger, @repository, @console_port)
     end
 
     it "@logger should be set an instance of the Logger." do
@@ -73,39 +74,19 @@ describe Castoro::Gateway::ConsoleServer do
     it "should be set instance variables correctly from arguments." do
       @c.instance_variable_get(:@logger).should     == @logger
       @c.instance_variable_get(:@repository).should == @repository
-      @c.instance_variable_get(:@port).should       == console_port
+      @c.instance_variable_get(:@port).should       == @console_port
     end
 
     it "#stop should raise server error." do
       Proc.new {
         @c.stop
-      }.should raise_error(Castoro::ServerError, "tcp server already stopped.")
+      }.should raise_error(Castoro::ServerError, "console already stopped.")
     end
 
     context "when start" do
       it "#alive? should be true." do
         @c.start
         @c.alive?.should be_true
-      end
-
-      it "TCPServer should be initialized." do
-        TCPServer.should_receive(:new).with(@c.instance_variable_get(:@host), @c.instance_variable_get(:@port)).exactly(1)
-        @c.start
-      end
-
-      it "TCPServer should be set an instance variable @tcp_server." do
-        @c.start
-        @c.instance_variable_get(:@tcp_server).should be_kind_of(TCPServer)
-      end
-
-      it "@thread should be set forked thread." do
-        @c.start
-        @c.instance_variable_get(:@thread).should be_kind_of(Thread)
-      end
-
-      it "#accept_loop should be called once" do
-        @c.should_receive(:accept_loop).exactly(1)
-        @c.start
       end
 
       it "should return self." do
@@ -116,64 +97,22 @@ describe Castoro::Gateway::ConsoleServer do
         @c.start
         Proc.new {
           @c.start
-        }.should raise_error(Castoro::ServerError, "tcp server already started.")
+        }.should raise_error(Castoro::ServerError, "console already started.")
       end
 
-      context "when receive NOP command" do
-        before do 
+      context "when send status message" do
+        it "repository should receive #status with no args exactly 1 tiems." do 
           @c.start
-        end
-
-        it "should be response Castoro::Protocol::Response::Nop instance." do
-          cmd = Castoro::Protocol::Command::Nop.new
-          Castoro::Sender::TCP.start(@logger, "127.0.0.1", 30150, 2.0) { |s|
-            s.send(cmd, 10.0)
-          }.should be_kind_of(Castoro::Protocol::Response::Nop)
+          @repository.should_receive(:status).with(no_args).exactly(1)
+          @c.status
         end
       end
 
-      context "when received STATUS command" do
-        before do 
+      context "when send peers message" do
+        it "repository should receive #peers with no args exactly 1 tiems." do 
           @c.start
-        end
-
-        it "should be response Castoro::Protocol::Response::Status instance." do
-          cmd = Castoro::Protocol::Command::Status.new
-          @repository.should_receive(:status).exactly(1)
-          Castoro::Sender::TCP.start(@logger, "127.0.0.1", 30150, 2.0) { |s|
-            s.send(cmd, 10.0)
-          }.should be_kind_of(Castoro::Protocol::Response::Status)
-        end
-      end
-
-      context "when received DUMP command" do
-        before do
-          @c.start
-        end
-
-        it "@repository#dump should be called once." do
-          cmd = Castoro::Protocol::Command::Dump.new
-          @repository.should_receive(:dump).exactly(1)
-          Castoro::Sender::TCP.start(@logger, "127.0.0.1", 30150, 2.0) { |s|
-            s.send_and_recv_stream(cmd, 10.0)
-          }
-        end
-      end
-
-      context "when received a unexpected command" do
-        before do
-          @c.start
-        end
-
-        it "should return an error response." do
-          cmd = Castoro::Protocol::Command::Get.new "1.1.1"
-          res = Castoro::Sender::TCP.start(@logger, "127.0.0.1", 30150, 10.0) { |s|
-            s.send(cmd, 10.0)
-          }
-          res.should be_kind_of(Castoro::Protocol::Response)
-          res.error?.should be_true
-          res.error["code"].should    == "Castoro::GatewayError"
-          res.error["message"].should == "only Status, Dump and Nop are acceptable."
+          @repository.should_receive(:peers).with(no_args).exactly(1)
+          @c.peers
         end
       end
 
@@ -185,32 +124,6 @@ describe Castoro::Gateway::ConsoleServer do
         it "#alive? should be false." do
           @c.stop
           @c.alive?.should be_false
-        end
-
-        it "@tcp_server should be closed." do
-          @c.instance_variable_get(:@tcp_server).close
-          tcpserv = mock TCPServer
-          tcpserv.stub!(:close)
-          tcpserv.stub!(:closed?).and_return false
-
-          tcpserv.should_receive(:close).exactly(1)
-          @c.instance_variable_set(:@tcp_server, tcpserv)
-          @c.stop
-        end
-
-        it "@tcp_server should be nil." do
-          @c.stop
-          @c.instance_variable_get(:@tcp_server).should be_nil
-        end
-
-        it "@thread#join should be called once." do
-          @c.instance_variable_get(:@thread).should_receive(:join).exactly(1)
-          @c.stop
-        end
-
-        it "@thread should be nil." do
-          @c.stop
-          @c.instance_variable_get(:@thread).should be_nil
         end
 
         it "should return self." do

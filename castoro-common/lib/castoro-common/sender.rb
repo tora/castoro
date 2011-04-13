@@ -107,44 +107,6 @@ module Castoro
         res
       end
 
-      ##
-      # Sender packet and get raw packet.
-      #
-      # === Args
-      #
-      # +data+::
-      #   (Castoro::Protocol::Command) transmitted packet data
-      # +expire+::
-      #   response timeout(sec).
-      #
-      # === Example
-      #
-      #  Castoro::Sender::TCP.start(Logger.new(nil), "127.0.0.1", port, 3.0) { |s|
-      #    s.send_and_recv_stream(Castoro::Protocol::Command::Dump.new, 3.0) { |received|
-      #      STDOUT.print received
-      #    }
-      #  }
-      #
-      def send_and_recv_stream data, expire
-        raise SenderError, "data should be Castoro::Protocol::Command." unless data.kind_of? Protocol::Command
-        raise SenderError, "sender service doesn't start." unless alive?
-        
-        @logger.debug { "sent to #{@target}\n#{data.to_s.chomp}" }
-        @socket.write data.to_s
-
-        if IO.select([@socket], nil, nil, expire)
-          unless (res = @socket.recv(1024)).to_s.length == 0
-            yield res
-
-            until (res = @socket.recv(1024)).to_s.length == 0
-              yield res
-            end
-          end
-        end
-
-        nil
-      end
-
       private
 
       ##

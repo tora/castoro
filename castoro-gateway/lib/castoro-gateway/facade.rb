@@ -53,6 +53,8 @@ module Castoro
         @gmp              = config["gateway"]["multicast_port"].to_i
         @gwp              = config["gateway"]["watchdog_port"].to_i
         @watchdog_logging = config["gateway"]["watchdog_logging"]
+
+        @index            = 0
       end
 
       ##
@@ -136,7 +138,6 @@ module Castoro
 
           return nil unless alive?
 
-          sockets = [@unicast, @multicast, @watchdog]
           ret = begin
                   IO.select(sockets, nil, nil, RECV_EXPIRE)
                 rescue Errno::EBADF
@@ -159,6 +160,15 @@ module Castoro
 
         [h, d]
       end
+
+      private
+
+      def sockets
+        ss = [@unicast, @multicast, @watchdog]
+        (@index = (@index + 1) % 3).times { ss << ss.shift }
+        ss
+      end
+
     end
   end
 end

@@ -53,7 +53,11 @@ COMMAND_OPTIONS = {
   :dump => {
     :verbose => false,
     :port => Castoro::Gateway::DEFAULT_SETTINGS["gateway"]["console_port"].to_i,
-  }
+  },
+  :peers => {
+    :verbose => false,
+    :port => Castoro::Gateway::DEFAULT_SETTINGS["gateway"]["console_port"].to_i,
+  },
 }
 
 def help
@@ -152,6 +156,14 @@ parser = OptionParser.new do |parser|
     end
 
   when :dump
+    parser.on('-v', '--verbose', 'verbose') do |v|
+      opt[:verbose] = true
+    end
+    parser.on('-p PORT', '--port <portnumber>', 'console port') do |v|
+      opt[:port] = v.to_i
+    end
+
+  when :peers
     parser.on('-v', '--verbose', 'verbose') do |v|
       opt[:verbose] = true
     end

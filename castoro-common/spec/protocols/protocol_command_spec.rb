@@ -102,18 +102,6 @@ describe Castoro::Protocol::Command do
     end
   end
 
-  context 'when parsed, argument for opecode set "STATUS"' do
-    it "should be able to create an instance of status command." do
-      Castoro::Protocol::Command.parse("STATUS", nil).should be_kind_of(Castoro::Protocol::Command::Status)
-    end
-  end
-
-  context 'when parsed, argument for opecode set "DUMP"' do
-    it "should be able to create an instance of dump command." do
-      Castoro::Protocol::Command.parse("DUMP", nil).should be_kind_of(Castoro::Protocol::Command::Dump)
-    end
-  end
-
   context 'when parsed, argument for opecode set "MKDIR"' do
     it "should be able to create an instance of mkdir command." do
       Castoro::Protocol::Command.parse("MKDIR", { "mode" => 1, "user" => "user100", "group" => "group100", "source" => "source100" }).should be_kind_of(Castoro::Protocol::Command::Mkdir)

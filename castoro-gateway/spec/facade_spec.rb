@@ -19,7 +19,6 @@
 
 require File.dirname(__FILE__) + '/spec_helper.rb'
 
-CONSOLE   = 30150
 UNICAST   = 30151
 MULTICAST = 30159
 WATCHDOG  = 30153
@@ -29,7 +28,6 @@ SETTINGS = {
 #  "multicast_device_addr" => IPSocket::getaddress(Socket::gethostname),
   "multicast_device_addr" => "127.0.0.1",
   "gateway" => {
-    "console_port" => CONSOLE,
     "unicast_port" => UNICAST,
     "multicast_port" => MULTICAST,
     "watchdog_port" => WATCHDOG,
@@ -199,7 +197,7 @@ describe Castoro::Gateway::Facade do
         @udp_header  = Castoro::Protocol::UDPHeader.new "999.3.2.1", 99999
         @nop    = Castoro::Protocol::Command::Nop.new
         @alive  = Castoro::Protocol::Command::Alive.new "host", 30, 1000
-        @status = Castoro::Protocol::Command::Status.new
+        @get    = Castoro::Protocol::Command::Get.new "1.2.3"
       end
 
       it "should return nil if facade is not alive" do
@@ -305,7 +303,6 @@ describe Castoro::Gateway::Facade do
         @facade.start
         @udp_sender.start
         @udp_sender.send @udp_header, @nop,   "127.0.0.1", UNICAST
-        @udp_sender.send @udp_header, @alive, "127.0.0.1", WATCHDOG
 
         ret = @facade.recv
 
@@ -314,6 +311,8 @@ describe Castoro::Gateway::Facade do
 
         ret[1].should be_kind_of Castoro::Protocol::Command::Nop
         ret[1].to_s.should == @nop.to_s
+
+        @udp_sender.send @udp_header, @alive, "127.0.0.1", WATCHDOG
 
         ret = @facade.recv
 
@@ -330,7 +329,6 @@ describe Castoro::Gateway::Facade do
         @facade.start
         @udp_sender.start
         @udp_sender.send @udp_header, @nop,   "127.0.0.1", UNICAST
-        @udp_sender.send @udp_header, @alive, "127.0.0.1", MULTICAST
 
         ret = @facade.recv
 
@@ -339,6 +337,8 @@ describe Castoro::Gateway::Facade do
 
         ret[1].should be_kind_of Castoro::Protocol::Command::Nop
         ret[1].to_s.should == @nop.to_s
+
+        @udp_sender.send @udp_header, @alive, "127.0.0.1", MULTICAST
 
         ret = @facade.recv
 
@@ -355,8 +355,6 @@ describe Castoro::Gateway::Facade do
         @facade.start
         @udp_sender.start
         @udp_sender.send @udp_header, @nop,   "127.0.0.1", UNICAST
-        @udp_sender.send @udp_header, @alive,   "127.0.0.1", MULTICAST
-        @udp_sender.send @udp_header, @status, "127.0.0.1", WATCHDOG
 
         ret = @facade.recv
 
@@ -366,6 +364,8 @@ describe Castoro::Gateway::Facade do
         ret[1].should be_kind_of Castoro::Protocol::Command::Nop
         ret[1].to_s.should == @nop.to_s
 
+        @udp_sender.send @udp_header, @alive,   "127.0.0.1", MULTICAST
+
         ret = @facade.recv
 
         ret[0].should be_kind_of Castoro::Protocol::UDPHeader
@@ -374,13 +374,15 @@ describe Castoro::Gateway::Facade do
         ret[1].should be_kind_of Castoro::Protocol::Command::Alive
         ret[1].to_s.should == @alive.to_s
 
+        @udp_sender.send @udp_header, @get, "127.0.0.1", WATCHDOG
+
         ret = @facade.recv
 
         ret[0].should be_kind_of Castoro::Protocol::UDPHeader
         ret[0].to_s.should == @udp_header.to_s
 
-        ret[1].should be_kind_of Castoro::Protocol::Command::Status
-        ret[1].to_s.should == @status.to_s
+        ret[1].should be_kind_of Castoro::Protocol::Command::Get
+        ret[1].to_s.should == @get.to_s
 
         @facade.recv.should be_nil
       end

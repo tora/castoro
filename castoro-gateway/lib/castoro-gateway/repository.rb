@@ -103,13 +103,6 @@ module Castoro
       end
 
       ##
-      # The status of hash representation is returned.
-      #
-      def status
-        @cache.status
-      end
-
-      ##
       # cache record is dumped.
       #
       # === Args
@@ -120,6 +113,20 @@ module Castoro
       def dump io
         @cache.dump io
       end 
+
+      ##
+      # The peers of hash representation is returned.
+      #
+      def peers
+        @cache.peers
+      end
+
+      ##
+      # The status of hash representation is returned.
+      #
+      def status
+        @cache.status
+      end
 
     private
 

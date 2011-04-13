@@ -2,6 +2,8 @@
 === 0.2.0 future
 
 * version renumbering.
+* Removed Castoro::Protocol::{Dump,Status]
+* Removed Castoro::Sender::TCP#send_and_recv_stream
 
 === 0.0.15 2011-03-23
 
