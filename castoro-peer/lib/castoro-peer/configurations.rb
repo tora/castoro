@@ -89,7 +89,6 @@ module Castoro
 
         'replication_transmission_datasize'   => 1048576,
 
-        'use_manipulator_daemon'              => true,
         'manipulator_socket'                  => '/var/castoro/manipulator.sock',
 
         'aliases'                             => {},
@@ -231,7 +230,7 @@ module Castoro
 
         positive_num_check :replication_transmission_datasize
 
-        file_existence_check :manipulator_socket if @h[:use_manipulator_daemon]
+        file_existence_check :manipulator_socket
 
         user_check  :dir_w_user
         user_check  :dir_a_user

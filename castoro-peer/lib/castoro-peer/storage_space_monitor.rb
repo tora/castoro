@@ -17,7 +17,7 @@
 #   along with Castoro.  If not, see <http://www.gnu.org/licenses/>.
 #
 
-require 'sync'
+require 'monitor'
 
 module Castoro #:nodoc:
   module Peer #:nodoc:
@@ -97,7 +97,7 @@ module Castoro #:nodoc:
         raise "directory not found - #{directory}" unless File.directory?(directory.to_s)
 
         @directory = directory.to_s
-        @locker = Sync.new
+        @locker = Monitor.new
       end
 
       ##
@@ -106,7 +106,7 @@ module Castoro #:nodoc:
       # start monitor service.
       #
       def start
-        @locker.synchronize(:EX) {
+        @locker.synchronize {
           raise 'monitor already started.' if alive?
 
           # first measure.
@@ -123,7 +123,7 @@ module Castoro #:nodoc:
       # stop monitor service.
       #
       def stop
-        @locker.synchronize(:EX) {
+        @locker.synchronize {
           raise 'monitor already stopped.' unless alive?
           
           @thread[:dying] = true
@@ -139,7 +139,7 @@ module Castoro #:nodoc:
       # Accessor of storage space (bytes)
       #
       def space_bytes
-        @locker.synchronize(:SH) {
+        @locker.synchronize {
           raise 'monitor does not started.' unless alive?
           @space_bytes
         }
@@ -151,7 +151,7 @@ module Castoro #:nodoc:
       # Return the state of alive or not alive.
       #
       def alive?
-        @locker.synchronize(:SH) { !! @thread }
+        @locker.synchronize { !! @thread }
       end
 
       private
@@ -165,7 +165,7 @@ module Castoro #:nodoc:
       def monitor_loop
         until Thread.current[:dying]
           space_bytes = (measure_space_bytes(@directory) || @space_bytes)
-          @locker.synchronize(:EX) { @space_bytes = space_bytes }
+          @locker.synchronize { @space_bytes = space_bytes }
           sleep @@monitoring_interval
         end
       end

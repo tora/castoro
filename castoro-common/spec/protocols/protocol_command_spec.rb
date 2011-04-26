@@ -102,15 +102,4 @@ describe Castoro::Protocol::Command do
     end
   end
 
-  context 'when parsed, argument for opecode set "MKDIR"' do
-    it "should be able to create an instance of mkdir command." do
-      Castoro::Protocol::Command.parse("MKDIR", { "mode" => 1, "user" => "user100", "group" => "group100", "source" => "source100" }).should be_kind_of(Castoro::Protocol::Command::Mkdir)
-    end
-  end
-
-  context 'when parsed, argument for opecode set "MV"' do
-    it "should be able to create an instance of mv command." do
-      Castoro::Protocol::Command.parse("MV", { "mode" => 1, "user" => "user100", "group" => "group100", "source" => "source100", "dest" => "dest100" }).should be_kind_of(Castoro::Protocol::Command::Mv)
-    end
-  end
 end

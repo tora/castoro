@@ -3,7 +3,9 @@
 
 * version renumbering.
 * Removed Castoro::Protocol::{Dump,Status]
+* Removed Castoro::Protocol::{Mv,Mkdir]
 * Removed Castoro::Sender::TCP#send_and_recv_stream
+* RSpec 2.x compatibility changes.
 
 === 0.0.15 2011-03-23
 

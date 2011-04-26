@@ -21,6 +21,7 @@ require File.dirname(__FILE__) + '/spec_helper.rb'
 
 require 'castoro-peer/configurations'
 require 'castoro-peer/manipulator'
+require "castoro-peer/csm_client"
 
 describe Castoro::Peer::Csm::Request::Catch do
   before do
@@ -53,15 +54,6 @@ describe Castoro::Peer::Csm::Request::Catch do
 
       it 'should be an instance of Castoro::Peer::Csm::Request::Catch' do
         @csm_req.should be_kind_of Castoro::Peer::Csm::Request::Catch
-      end
-
-      it 'should instance valiables be set correctly.' do
-        @csm_req.instance_variable_get(:@subcommand).should == "mkdir"
-        @csm_req.instance_variable_get(:@user).should == Process.euid
-        @csm_req.instance_variable_get(:@group).should ==Process.egid 
-        @csm_req.instance_variable_get(:@mode).should == '0755'
-        @csm_req.instance_variable_get(:@path1).should == "/src/path"
-        @csm_req.instance_variable_get(:@path2).should == ""
       end
 
       after do

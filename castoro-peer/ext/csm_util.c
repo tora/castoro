@@ -60,7 +60,7 @@ csm_optimistic_mkdir(VALUE base, VALUE dir, mode_t m, uid_t u, gid_t g)
     switch(errno) {
       case ENOENT:
         parent = rb_funcall(rb_cFile, rb_intern("dirname"), 1, dir);
-        if (RTEST(rb_funcall(rb_cFile, rb_intern("directory?"), 1, parent))) {
+        if (RTEST(rb_funcall(rb_cFile, rb_intern("exist?"), 1, parent))) {
           rb_sys_fail(d);
         }
         csm_optimistic_mkdir(base, parent, m, u, g);
@@ -70,6 +70,9 @@ csm_optimistic_mkdir(VALUE base, VALUE dir, mode_t m, uid_t u, gid_t g)
         break;
 
       case EEXIST:
+        if (!RTEST(rb_funcall(rb_cFile, rb_intern("directory?"), 1, dir))) {
+          rb_sys_fail(d);
+        }
         existed = 1;
         break;
 
@@ -90,7 +93,7 @@ csm_pessimistic_mkdir(VALUE base, VALUE dir, mode_t m, uid_t u, gid_t g)
     switch(errno) {
       case ENOENT:
         parent = rb_funcall(rb_cFile, rb_intern("dirname"), 1, dir);
-        if (RTEST(rb_funcall(rb_cFile, rb_intern("directory?"), 1, parent))) {
+        if (RTEST(rb_funcall(rb_cFile, rb_intern("exist?"), 1, parent))) {
           rb_sys_fail(d);
         }
         csm_optimistic_mkdir(base, parent, m, u, g);
@@ -139,7 +142,26 @@ rb_csm_init(VALUE self, VALUE base)
   if (!RTEST(rb_funcall(rb_cFile, rb_intern("directory?"), 1, base))) {
     rb_raise(rb_eArgError, "base directory not found - %s", RSTRING_PTR(base));
   }
-  rb_iv_set(self, "@base", rb_str_freeze(rb_str_dup(base)));
+
+  // path normalize.
+  VALUE str = rb_funcall(rb_cFile, rb_intern("expand_path"), 1, base);
+  VALUE args[1];
+  args[0] = rb_str_new2("\\.*\\/$");
+  VALUE regexp = rb_class_new_instance(1, args, rb_cRegexp);
+  if (!RTEST(rb_funcall(regexp, rb_intern("match"), 1, str))) {
+    rb_funcall(str, rb_intern("<<"), 1, rb_str_new2("/"));
+  }
+  rb_iv_set(self, "@base", rb_str_freeze(rb_str_dup(str)));
+
+  args[0] = rb_str_new2("^\\/.*$");
+  rb_iv_set(self, "absolute", rb_class_new_instance(1, args, rb_cRegexp));
+
+  VALUE s = rb_str_new2("^");
+  rb_str_cat2(s, RSTRING_PTR(rb_funcall(rb_cRegexp, rb_intern("escape"), 1, str)));
+  rb_str_cat2(s, ".*$");
+  args[0] = s;
+  rb_iv_set(self, "validpath", rb_class_new_instance(1, args, rb_cRegexp));
+
   rb_obj_freeze(self);
   return self;
 }
@@ -153,10 +175,19 @@ rb_csm_mkdir(VALUE self, VALUE src, VALUE mode, VALUE uid, VALUE gid)
   uid_t  u = NUM2UIDT(uid);
   gid_t  g = NUM2GIDT(gid);
 
-  // src =~ /^#{@base}\/.*$/
-
   if (getpwuid(u) == 0) rb_raise(rb_eArgError, "can't find user for %d", (int)u);
   if (getgrgid(g) == 0) rb_raise(rb_eArgError, "can't find group for %d", (int)g);
+
+  if (!RTEST(rb_funcall(rb_iv_get(self, "absolute"), rb_intern("=~"), 1, s))) {
+    rb_raise(rb_eArgError, "relative path cannot set to be source.");
+  }
+  if (!RTEST(rb_funcall(rb_iv_get(self, "validpath"), rb_intern("=~"), 1, s))) {
+    rb_raise(rb_eArgError, "Invalid source directory - %s", RSTRING_PTR(s));
+  }
+
+  if (RTEST(rb_funcall(rb_cFile, rb_intern("exist?"), 1, s))) {
+    rb_raise(rb_eArgError, "source path already exist.");
+  }
 
   csm_pessimistic_mkdir(rb_iv_get(self, "@base"), s, m, u, g);
 
@@ -177,6 +208,26 @@ rb_csm_move(VALUE self, VALUE src, VALUE dst, VALUE mode, VALUE uid, VALUE gid)
   if (getpwuid(u) == 0) rb_raise(rb_eArgError, "can't find user for %d", (int)u);
   if (getgrgid(g) == 0) rb_raise(rb_eArgError, "can't find group for %d", (int)g);
 
+  if (!RTEST(rb_funcall(rb_iv_get(self, "absolute"), rb_intern("=~"), 1, s))) {
+    rb_raise(rb_eArgError, "relative path cannot set to be source.");
+  }
+  if (!RTEST(rb_funcall(rb_iv_get(self, "absolute"), rb_intern("=~"), 1, d))) {
+    rb_raise(rb_eArgError, "relative path cannot set to be dest.");
+  }
+  if (!RTEST(rb_funcall(rb_iv_get(self, "validpath"), rb_intern("=~"), 1, s))) {
+    rb_raise(rb_eArgError, "Invalid source directory - %s", RSTRING_PTR(s));
+  }
+  if (!RTEST(rb_funcall(rb_iv_get(self, "validpath"), rb_intern("=~"), 1, d))) {
+    rb_raise(rb_eArgError, "Invalid dest directory - %s", RSTRING_PTR(d));
+  }
+
+  if (!RTEST(rb_funcall(rb_cFile, rb_intern("exist?"), 1, s))) {
+    rb_raise(rb_eArgError, "source path not exist.");
+  }
+  if (RTEST(rb_funcall(rb_cFile, rb_intern("exist?"), 1, d))) {
+    rb_raise(rb_eArgError, "dest path already exist.");
+  }
+
   VALUE p = rb_funcall(rb_cFile, rb_intern("dirname"), 1, d);
   csm_optimistic_mkdir(rb_iv_get(self, "@base"), p, m, u, g);
 
@@ -185,15 +236,23 @@ rb_csm_move(VALUE self, VALUE src, VALUE dst, VALUE mode, VALUE uid, VALUE gid)
   return self;
 }
 
+static VALUE
+rb_csm_base_get(VALUE self)
+{
+  return rb_iv_get(self, "@base");
+}
+
 void
 Init_csm_util()
 {
-  VALUE cCastoro = rb_define_module("Castoro");
-  VALUE cPeer    = rb_define_module_under(cCastoro, "Peer");
-  VALUE cCsm     = rb_define_class_under(cPeer, "CsmUtil", rb_cObject);
+  VALUE cCastoro     = rb_define_module("Castoro");
+  VALUE cPeer        = rb_define_module_under(cCastoro, "Peer");
+  VALUE cManipulator = rb_define_module_under(cPeer, "Manipulator");
+  VALUE cCsm         = rb_define_class_under(cManipulator, "CsmUtil", rb_cObject);
 
   rb_define_method(cCsm, "initialize", RUBY_METHOD_FUNC(rb_csm_init), 1);
   rb_define_method(cCsm, "mkdir", RUBY_METHOD_FUNC(rb_csm_mkdir), 4);
   rb_define_method(cCsm, "move", RUBY_METHOD_FUNC(rb_csm_move), 5);
+  rb_define_method(cCsm, "base", RUBY_METHOD_FUNC(rb_csm_base_get), 0);
 }
 

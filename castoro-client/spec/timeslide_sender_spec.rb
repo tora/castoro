@@ -20,7 +20,7 @@
 require File.dirname(__FILE__) + '/spec_helper.rb'
 
 describe Castoro::Client::TimeslideSender do
-  Spec::Matchers.define :included do |expected|
+  RSpec::Matchers.define :included do |expected|
     match do |actual|
       expected.include? actual
     end
@@ -28,8 +28,8 @@ describe Castoro::Client::TimeslideSender do
 
   before(:all) do
     # times.
-    @times_of_start_and_stop = 1000
-    @times_of_send           = 10000
+    @times_of_start_and_stop = 100
+    @times_of_send           = 100
 
     # configurations
     @logger = Logger.new(nil)
@@ -74,9 +74,11 @@ describe Castoro::Client::TimeslideSender do
 
   context "when port number 30003 is blocked" do
     before do
-      @blockers = []
-      @blockers << Castoro::Receiver::UDP.new(@logger, 30003) { |h, d, p, i| }
-      @blockers.each { |b| b.start }
+      @blockers = [30003].map { |port|
+        s = UDPSocket.new
+        s.bind nil, port
+        s
+      }
       @w = Castoro::Client::TimeslideSender.new(
         @logger,
         @my_host,
@@ -97,17 +99,17 @@ describe Castoro::Client::TimeslideSender do
     after do
       @w.stop rescue nil
       @w = nil
-      @blockers.each { |b| b.stop rescue nil }
-      @blockers.each { |b| b = nil }
+      @blockers.each { |b| b.close; b = nil }
     end
   end
 
   context "when port number 30003, 30005 is blocked" do
     before do
-      @blockers = []
-      @blockers << Castoro::Receiver::UDP.new(@logger, 30003) { |h, d, p, i| }
-      @blockers << Castoro::Receiver::UDP.new(@logger, 30005) { |h, d, p, i| }
-      @blockers.each { |b| b.start }
+      @blockers = [30003, 30005].map { |port|
+        s = UDPSocket.new
+        s.bind nil, port
+        s
+      }
       @w = Castoro::Client::TimeslideSender.new(
         @logger,
         @my_host,
@@ -128,18 +130,17 @@ describe Castoro::Client::TimeslideSender do
     after do
       @w.stop rescue nil
       @w = nil
-      @blockers.each { |b| b.stop rescue nil }
-      @blockers.each { |b| b = nil }
+      @blockers.each { |b| b.close; b = nil }
     end
   end
 
   context "when port number 30003, 30004, 30005 is blocked" do
     before do
-      @blockers = []
-      @blockers << Castoro::Receiver::UDP.new(@logger, 30003) { |h, d, p, i| }
-      @blockers << Castoro::Receiver::UDP.new(@logger, 30004) { |h, d, p, i| }
-      @blockers << Castoro::Receiver::UDP.new(@logger, 30005) { |h, d, p, i| }
-      @blockers.each { |b| b.start }
+      @blockers = [30003, 30004, 30005].map { |port|
+        s = UDPSocket.new
+        s.bind nil, port
+        s
+      }
       @w = Castoro::Client::TimeslideSender.new(
         @logger,
         @my_host,
@@ -161,8 +162,7 @@ describe Castoro::Client::TimeslideSender do
     after do
       @w.stop rescue nil
       @w = nil
-      @blockers.each { |b| b.stop rescue nil }
-      @blockers.each { |b| b = nil }
+      @blockers.each { |b| b.close; b = nil }
     end
   end
 
@@ -228,7 +228,7 @@ describe Castoro::Client::TimeslideSender do
 
       it "#send should be able to be executed normally. and times of send equals sid" do
         expected = Castoro::Protocol::Response::Nop.new(nil).to_s
-        @times_of_send.times {
+        @times_of_send.times { |i|
           @w.send(@n).to_s.should == expected
         }
         @w.sid.should == @times_of_send

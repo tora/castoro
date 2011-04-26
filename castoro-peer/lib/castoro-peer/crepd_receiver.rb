@@ -27,7 +27,7 @@ require 'castoro-peer/basket'
 require 'castoro-peer/channel'
 require 'castoro-peer/extended_udp_socket'
 require 'castoro-peer/log'
-require 'castoro-peer/manipulator'
+require 'castoro-peer/csm_client'
 require 'castoro-peer/server_status'
 require 'castoro-peer/scheduler'
 
@@ -59,7 +59,7 @@ module Castoro
         @directory_entries = []
         @basket = nil
         @dst = nil
-        @csm_executor = Csm.create_executor (config[:use_manipulator_daemon] && config[:manipulator_socket])
+        @csm_executor = Csm::Client.new config
       end
 
       def run
@@ -172,7 +172,9 @@ module Castoro
         begin
           @csm_executor.execute( csm_request )
         rescue => e
-          raise RetryableError, "#{e.class} #{e.message} for #{@basket} #{@path_r}"
+          raise RetryableError.new("#{e.class} #{e.message} for #{@basket} #{@path_r}").tap { |ex|
+            ex.set_backtrace e.backtrace
+          }
         end
         return nil
       end
@@ -322,7 +324,6 @@ module Castoro
       end
 
       def insert_replication_candidate( action )
-        a = action
         begin
           file = "#{DIR_WAITING}/#{@basket.to_s}.#{action}"
           f = File.new( file, "w" )

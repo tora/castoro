@@ -136,18 +136,6 @@ describe Castoro::Protocol::Response do
     end
   end
 
-  context 'when parsed, argument for opecode set "MKDIR"' do
-    it "should be able to create an instance of mkdir response." do
-      Castoro::Protocol::Response.parse("MKDIR", {"error" => nil, "mode" => 1, "user" => "user100", "group" => "group100", "source" => "source100" }).should be_kind_of(Castoro::Protocol::Response::Mkdir)
-    end
-  end
-
-  context 'when parsed, argument for opecode set "MV"' do
-    it "should be able to create an instance of mv response." do
-      Castoro::Protocol::Response.parse("MV", {"error" => nil, "mode" => 1, "user" => "user100", "group" => "group100", "source" => "source100", "dest" => "dest100" }).should be_kind_of(Castoro::Protocol::Response::Mv)
-    end
-  end
-
   context 'when parsed, argument for opecode set Nil' do
     it "should be able to create an instance of response." do
       Castoro::Protocol::Response.parse(nil, {"error" => nil}).should be_kind_of(Castoro::Protocol::Response)

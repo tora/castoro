@@ -5,6 +5,7 @@
 * Castoro::Gateway::ConsoleServer is reafctored.
 ** The means of communication is changed to dRuby.
 * Added subcommand peers
+* RSpec 2.x compatibility changes.
 
 === 0.0.16 2011-03-23
 

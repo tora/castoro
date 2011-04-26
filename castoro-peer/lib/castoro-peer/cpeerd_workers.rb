@@ -23,7 +23,7 @@ require 'castoro-peer/worker'
 require 'castoro-peer/ticket'
 require 'castoro-peer/extended_udp_socket'
 require 'castoro-peer/channel'
-require 'castoro-peer/manipulator'
+require 'castoro-peer/csm_client'
 require 'castoro-peer/log'
 require 'castoro-peer/pipeline'
 require 'castoro-peer/server_status'
@@ -502,7 +502,7 @@ module Castoro
       class CsmController < Worker
         def initialize config
           super()
-          @csm_executor = Csm.create_executor (config[:use_manipulator_daemon] && config[:manipulator_socket])
+          @csm_executor = Csm::Client.new config
         end
 
         def serve

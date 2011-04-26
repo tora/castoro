@@ -3,6 +3,10 @@
 
 * version renumbering.
 * fixed issue - #12
+* Manipulator and Csm are reafctored.
+** It integrated it into castoro-peer.
+** The means of communication is changed to dRuby.
+* RSpec 2.x compatibility changes.
 
 === 0.0.21 2010-12-21
 

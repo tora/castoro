@@ -183,6 +183,9 @@ describe Castoro::Client do
 
     context "the Response not intended." do
       it "should raise Castoro::ClientError with TimeslideSender#send should be called once." do
+        @sender_mock.stub!(:send).once.and_return {
+          Castoro::Protocol::Response::Create.new nil, @key
+        }
         @sender_mock.should_receive(:send).once.and_return {
           Castoro::Protocol::Response::Create.new nil, @key
         }
@@ -194,6 +197,9 @@ describe Castoro::Client do
 
     context "gateway connection failed." do
       it "should raise Castoro::ClientError with #send should be called once." do
+        @sender_mock.stub!(:send).once.and_return {
+          Castoro::Protocol::Response::Create::Gateway.new "error", @key, {}
+        }
         @sender_mock.should_receive(:send).once.and_return {
           Castoro::Protocol::Response::Create::Gateway.new "error", @key, {}
         }

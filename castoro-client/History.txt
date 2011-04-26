@@ -2,6 +2,7 @@
 === 0.2.0 future
 
 * version renumbering.
+* RSpec 2.x compatibility changes.
 
 === 0.0.13 2010-12-15
 

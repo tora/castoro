@@ -85,11 +85,6 @@ module Castoro
         Protocol::Command::Drop.new(operand["basket"], operand["host"], operand["path"])
       when "ALIVE"
         Protocol::Command::Alive.new(operand["host"], operand["status"], operand["available"])
-      when "MKDIR"
-        Protocol::Command::Mkdir.new(operand["mode"], operand["user"], operand["group"], operand["source"])
-      when "MV"
-        Protocol::Command::Mv.new(operand["mode"], operand["user"], operand["group"], 
-                                  operand["source"], operand["dest"])
       else
         raise "Protocol parse error - unsupported opecode."
       end
@@ -337,66 +332,6 @@ module Castoro
     end
   end
 
-  class Protocol::Command::Mkdir < Protocol::Command
-    attr_reader :mode, :user, :group, :source
-    def initialize mode, user, group, source
-      raise "Nil cannot be set for mode."   unless mode
-      raise "Nil cannot be set for user."   unless user
-      raise "Nil cannot be set for group."  unless group
-      raise "Nil cannot be set for source." unless source
-      if mode.kind_of? Numeric
-        @mode = mode
-      else
-        raise "mode should set the Numeric or octal number character." unless mode.to_s =~ /^[01234567]+$/
-        @mode = mode.oct
-      end
-      @user, @group, @source = user, group, source
-    end
-    def to_s
-      operand = {
-        "mode" => @mode.to_s(8),
-        "user" => @user,
-        "group" => @group,
-        "source" => @source,
-      }
-      [ "1.1", "C", "MKDIR", operand ].to_json + "\r\n"
-    end
-    def error_response error = {}
-      Protocol::Response::Mkdir.new(error)
-    end
-  end
-
-  class Protocol::Command::Mv < Protocol::Command
-    attr_reader :mode, :user, :group, :source, :dest
-    def initialize mode, user, group, source, dest
-      raise "Nil cannot be set for mode."   unless mode
-      raise "Nil cannot be set for user."   unless user
-      raise "Nil cannot be set for group."  unless group
-      raise "Nil cannot be set for source." unless source
-      raise "Nil cannot be set for dest."   unless dest
-      if mode.kind_of? Numeric
-        @mode = mode
-      else
-        raise "mode should set the Numeric or octal number character." unless mode.to_s =~ /^[01234567]+$/
-        @mode = mode.oct
-      end
-      @user, @group, @source, @dest = user, group, source, dest
-    end
-    def to_s
-      operand = {
-        "mode" => @mode.to_s(8),
-        "user" => @user,
-        "group" => @group,
-        "source" => @source,
-        "dest" => @dest,
-      }
-      [ "1.1", "C", "MV", operand ].to_json + "\r\n"
-    end
-    def error_response error = {}
-      Protocol::Response::Mv.new(error)
-    end
-  end
-
   class Protocol::Response < Protocol
     attr_reader :error
     def self.parse opecode, operand
@@ -425,10 +360,6 @@ module Castoro
         Protocol::Response::Drop.new(operand["error"])
       when "ALIVE"
         Protocol::Response::Alive.new(operand["error"])
-      when "MKDIR"
-        Protocol::Response::Mkdir.new(operand["error"])
-      when "MV"
-        Protocol::Response::Mv.new(operand["error"])
       when nil
         Protocol::Response.new(operand["error"])
       else
@@ -598,22 +529,6 @@ module Castoro
       operand = {}
       operand["error"] = @error if @error
       [ "1.1", "R", "ALIVE", operand].to_json + "\r\n"
-    end
-  end
-
-  class Protocol::Response::Mkdir < Protocol::Response
-    def to_s
-      operand = {}
-      operand["error"] = @error if @error
-      [ "1.1", "R", "MKDIR", operand].to_json + "\r\n"
-    end
-  end
-
-  class Protocol::Response::Mv < Protocol::Response
-    def to_s
-      operand = {}
-      operand["error"] = @error if @error
-      [ "1.1", "R", "MV", operand].to_json + "\r\n"
     end
   end
 

@@ -21,6 +21,7 @@ require File.dirname(__FILE__) + '/spec_helper.rb'
 
 require 'castoro-peer/configurations'
 require 'castoro-peer/manipulator'
+require "castoro-peer/csm_client"
 
 describe Castoro::Peer::Csm::Request::Finalize do
   before do
@@ -87,15 +88,6 @@ describe Castoro::Peer::Csm::Request::Finalize do
 
       it 'should be an instance of Castoro::Peer::Csm::Request::Finalize' do
         @csm_req.should be_kind_of Castoro::Peer::Csm::Request::Finalize
-      end
-
-      it 'should instance valiables be set correctly.' do
-        @csm_req.instance_variable_get(:@subcommand).should == "mv"
-        @csm_req.instance_variable_get(:@user).should == @conf[:dir_a_user]
-        @csm_req.instance_variable_get(:@group).should == @conf[:dir_a_group]
-        @csm_req.instance_variable_get(:@mode).should == @conf[:dir_a_perm]
-        @csm_req.instance_variable_get(:@path1).should == @path1
-        @csm_req.instance_variable_get(:@path2).should == @path2
       end
 
       after do

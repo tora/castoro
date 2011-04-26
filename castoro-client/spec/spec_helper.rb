@@ -18,11 +18,11 @@
 #
 
 begin
-  require 'spec'
+  require 'rspec'
 rescue LoadError
   require 'rubygems' unless ENV['NO_RUBYGEMS']
-  gem 'rspec'
-  require 'spec'
+  gem 'rspec', ">=2.0.0"
+  require 'rspec'
 end
 
 $:.unshift(File.dirname(__FILE__) + '/../lib')

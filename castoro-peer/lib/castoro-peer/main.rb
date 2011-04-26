@@ -28,7 +28,6 @@ require 'castoro-peer/signal_handler'
 require 'castoro-peer/custom_condition_variable'
 
 require 'castoro-peer/basket'
-require 'castoro-peer/manipulator'
 
 module Castoro
   module Peer
@@ -53,7 +52,6 @@ module Castoro
 
         # refactor renessary.
         Basket.class_variable_set :@@base_dir, @config[:basket_base_dir]
-        Csm::Request.class_variable_set :@@configurations, @config
 
         if ( Process.euid == 0 )
           # Todo: notifies with an understandable error message if effective_user is not set
