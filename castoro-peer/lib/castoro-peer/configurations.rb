@@ -40,12 +40,12 @@ module Castoro
 
         'gateway_udp_command_port'            => 30109,
         'peer_tcp_command_port'               => 30111,
-        'peer_unicast_udp_command_port'       => 30111,
-        'peer_multicast_udp_command_port'     => 30112,
         'watchdog_command_port'               => 30113,
         'replication_tcp_command_port'        => 30149,
         'replication_udp_command_port'        => 30149,
         'replication_tcp_communication_port'  => 30148,
+
+        'peer_console_port'                   => 30101,
 
         'cmond_maintenance_port'              => 30100,
         'cpeerd_maintenance_port'             => 30102,
@@ -60,9 +60,7 @@ module Castoro
         'number_of_regular_command_processor' => 10,
         'number_of_basket_status_query_db'    => 10,
         'number_of_csm_controller'            => 3,
-        'number_of_udp_response_sender'       => 10,
         'number_of_tcp_response_sender'       => 10,
-        'number_of_multicast_command_sender'  => 3,
         'number_of_replication_db_client'     => 1,
         'number_of_replication_sender'        => 3,
 
@@ -201,12 +199,12 @@ module Castoro
 
         port_num_check :gateway_udp_command_port
         port_num_check :peer_tcp_command_port
-        port_num_check :peer_unicast_udp_command_port
-        port_num_check :peer_multicast_udp_command_port
         port_num_check :watchdog_command_port
         port_num_check :replication_tcp_command_port
         port_num_check :replication_udp_command_port
         port_num_check :replication_tcp_communication_port
+
+        port_num_check :peer_console_port
 
         port_num_check :cmond_maintenance_port
         port_num_check :cpeerd_maintenance_port
@@ -219,9 +217,7 @@ module Castoro
         positive_num_check :number_of_regular_command_processor
         positive_num_check :number_of_basket_status_query_db
         positive_num_check :number_of_csm_controller
-        positive_num_check :number_of_udp_response_sender
         positive_num_check :number_of_tcp_response_sender
-        positive_num_check :number_of_multicast_command_sender
         positive_num_check :number_of_replication_db_client
         positive_num_check :number_of_replication_sender
 

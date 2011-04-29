@@ -17,6 +17,8 @@
 #   along with Castoro.  If not, see <http://www.gnu.org/licenses/>.
 #
 
+require "drb/drb"
+
 require 'castoro-peer/pre_threaded_tcp_server'
 require 'castoro-peer/worker'
 require 'castoro-peer/log'
@@ -25,7 +27,6 @@ require 'castoro-peer/extended_udp_socket'
 require 'castoro-peer/extended_tcp_socket'
 require 'castoro-peer/channel'
 require 'castoro-peer/maintenace_server'
-require 'castoro-peer/storage_space_monitor'
 
 module Castoro
   module Peer
@@ -78,23 +79,19 @@ module Castoro
       def initialize config
         c = @config = config
         @w = []
-        @s = StorageSpaceMonitor.new( c[:basket_base_dir] )
-        @a = AlivePacketSender.new( c[:multicast_address], c[:watchdog_command_port], @s, c[:hostname_for_client], c[:period_of_alive_packet_sender], c[:multicast_if] )
         @p = CxxxdCommnicationWorker.new( '127.0.0.1', c[:cpeerd_healthcheck_port] )
         @r = CxxxdCommnicationWorker.new( '127.0.0.1', c[:crepd_healthcheck_port] )
         @colleague_hosts = c.storage_servers.colleague_hosts
         @colleague_hosts.each { |h| @w << CxxxdCommnicationWorker.new( h, c[:cmond_healthcheck_port] ) }
-        @z = SupervisorWorker.new( @p, @r, @w, @a, c[:cpeerd_maintenance_port], c[:crepd_maintenance_port] )
-        @m = CmondTcpMaintenaceServer.new( c, c[:cmond_maintenance_port], @p, @r, @w, @a )
+        @z = SupervisorWorker.new( @p, @r, @w, c[:cpeerd_maintenance_port], c[:crepd_maintenance_port], c[:peer_console_port] )
+        @m = CmondTcpMaintenaceServer.new( c, c[:cmond_maintenance_port], @p, @r, @w )
         @h = TCPHealthCheckPatientServer.new( c, c[:cmond_healthcheck_port] )
       end
 
       def start_workers
-        @s.start
         @w.reverse_each { |w| w.start }
         @r.start
         @p.start
-        @a.start
         sleep 1
         @z.start
       end
@@ -104,8 +101,6 @@ module Castoro
         @w.each { |w| w.graceful_stop }
         @p.graceful_stop
         @r.graceful_stop
-        @a.graceful_stop
-        @s.stop
       end
 
       def start_maintenance_server
@@ -234,12 +229,14 @@ module Castoro
    ########################################################################
 
       class SupervisorWorker < Worker
-        def initialize( p, r, w, alive_packet_sender, cpeerd_port, crepd_port )
-          @p, @r, @w, @alive_packet_sender = p, r, w, alive_packet_sender
+        def initialize( p, r, w, cpeerd_port, crepd_port, peer_console_port )
+          @p, @r, @w, = p, r, w
           @cpeerd_port, @crepd_port = cpeerd_port, crepd_port
           super
           @error = false
           # @lsat_min = ServerStatus::ACTIVE
+
+          @console = DRbObject.new_with_uri "druby://:#{peer_console_port}"
         end
 
         def serve
@@ -290,9 +287,9 @@ module Castoro
             if ( min < ServerStatus.instance.status )  # Todo: falling down and rising up? ...
               if ( $AUTO_PILOT )
                 ServerStatus.instance.status = min
+                @console.watchdog_status = ServerStatus.instance.status
                 sleep 0.01
                 RemoteControl.set_mode_of_every_local_target @cpeerd_port, @crepd_port
-                @alive_packet_sender.send_alive_packet
               else
                 Log.notice( "STATUS change (from #{ServerStatus.instance.status_name} to #{min}) is requested, but auto is disabled" )
               end
@@ -313,50 +310,16 @@ module Castoro
       end
 
    ########################################################################
-   # AlivePacketSender
-   ########################################################################
-
-      class AlivePacketSender < Worker
-        def initialize( ip, port, space_monitor, host, period, multicast_if )
-          @ip, @port, @space_monitor = ip, port, space_monitor
-          super
-          @channel   = UdpMulticastClientChannel.new( ExtendedUDPSocket.new multicast_if )
-          @host      = host
-          @period    = period
-          @mutex     = Mutex.new
-        end
-
-        def serve
-          send_alive_packet
-          sleep @period
-        end
-
-        def send_alive_packet
-          @mutex.synchronize {
-            status = ServerStatus.instance.status
-            unless ( status == ServerStatus::UNKNOWN )
-              args = Hash[ 'host', @host, 'status', status, 'available', @space_monitor.space_bytes ]
-              @channel.send( 'ALIVE', args, @ip, @port )
-            end
-          }
-        end
-
-        def graceful_stop
-          finished
-          super
-        end
-      end
-
-   ########################################################################
    # TcpMaintenaceServer
    ########################################################################
 
       class CmondTcpMaintenaceServer < TcpMaintenaceServer
-        def initialize( config, port, p, r, w, alive_packet_sender )
-          @p, @r, @w, @alive_packet_sender = p, r, w, alive_packet_sender
+        def initialize( config, port, p, r, w )
+          @p, @r, @w = p, r, w
           super( config, port )
           @cpeerd_port = config[:cpeerd_maintenance_port]
           @crepd_port  = config[:crepd_maintenance_port]
+          @console = DRbObject.new_with_uri "druby://:#{config[:peer_console_port]}"
         end
 
         def do_help
@@ -376,8 +339,8 @@ module Castoro
         end
 
         def do_shutdown
-          ServerStatus.instance.status = ServerStatus::MAINTENANCE 
-          @alive_packet_sender.send_alive_packet
+          ServerStatus.instance.status = ServerStatus::MAINTENANCE
+          @console.watchdog_status = ServerStatus.instance.status
           # Todo:
           Thread.new {
             sleep 0.5
@@ -392,11 +355,11 @@ module Castoro
           if (para)
             para.downcase!
             ServerStatus.instance.status_name = para
+            @console.watchdog_status = ServerStatus.instance.status
             RemoteControl.set_mode_of_every_local_target @cpeerd_port, @crepd_port
           end
           x = ServerStatus.instance.status_name
           @io.syswrite( "run mode: #{x}\n" )
-          @alive_packet_sender.send_alive_packet
         end
 
         def do_backdoor_mode
@@ -407,6 +370,7 @@ module Castoro
             if (para)
               para.downcase!
               ServerStatus.instance.status_name = para
+              @console.watchdog_status = ServerStatus.instance.status
               RemoteControl.set_mode_of_every_local_target @cpeerd_port, @crepd_port
             end
             x = ServerStatus.instance.status_name
@@ -419,7 +383,6 @@ module Castoro
               @io.syswrite( "run mode: #{x}\n" )
             end
           end
-          @alive_packet_sender.send_alive_packet
         end
 
         def do_status

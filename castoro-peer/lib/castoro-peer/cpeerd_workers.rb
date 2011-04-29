@@ -76,15 +76,6 @@ module Castoro
 #      def nickname; 'ecr' ; end
 #    end
 
-    class MulticastCommandSenderTicketPool < SingletonTicketPool
-      def fullname; 'Multicast command sender ticket pool' ; end
-      def nickname; 'mtp' ; end
-
-      def create_ticket
-        super( CommandSenderTicket )
-      end
-    end
-
 ########################################################################
 # Pipelines
 ########################################################################
@@ -115,31 +106,9 @@ module Castoro
       def nickname; 'sm' ; end
     end
 
-    class MulticastCommandSenderPL < SingletonPipeline
-      def fullname; 'Multicast command sender pipeline' ; end
-      def nickname; 'ms' ; end
-    end
-
-    class ResponseSenderPL  # This class is a delegator class
-      include Singleton
-
-      def enq( ticket )
-        if ( ticket.channel.tcp? )
-          TcpResponseSenderPL.instance.enq ticket
-        else
-          UdpResponseSenderPL.instance.enq ticket
-        end
-      end
-    end
-
     class TcpResponseSenderPL < SingletonPipeline
       def fullname; 'TCP response sender pipeline' ; end
       def nickname; 'tr' ; end
-    end
-
-    class UdpResponseSenderPL < SingletonPipeline
-      def fullname; 'UDP response sender pipeline' ; end
-      def nickname; 'ur' ; end
     end
 
     class ReplicationPL < SingletonPipeline
@@ -155,38 +124,31 @@ module Castoro
 
       STATISTICS_TARGETS = [
                             CommandReceiverTicketPool,
-                            MulticastCommandSenderTicketPool,
                             RegularCommandReceiverPL,
                             ExpressCommandReceiverPL,
                             BasketStatusQueryDatabasePL,
                             CsmControllerPL,
-                            MulticastCommandSenderPL,
                             TcpResponseSenderPL,
-                            UdpResponseSenderPL,
                             ReplicationPL,
                            ]
 
       def initialize config
         c = @config = config
         @w = []
-        @w << UdpCommandReceiver.new( ExpressCommandReceiverPL.instance, c[:peer_multicast_udp_command_port], c[:multicast_address], c[:multicast_if] )
-        @w << UdpCommandReceiver.new( ExpressCommandReceiverPL.instance, c[:peer_unicast_udp_command_port], c[:multicast_address], c[:multicast_if] )
+
+        @peer_console = DRbObject.new_with_uri "druby://127.0.0.1:#{c[:peer_console_port]}"
 
         @w << TcpCommandAcceptor.new( TcpAcceptorPL.instance, c[:peer_tcp_command_port] )
         5.times { @w << TcpCommandReceiver.new( TcpAcceptorPL.instance, RegularCommandReceiverPL.instance ) }
         c[:number_of_express_command_processor].times {
-          @w << CommandProcessor.new( ExpressCommandReceiverPL.instance, c[:hostname_for_client] )
+          @w << CommandProcessor.new( ExpressCommandReceiverPL.instance, c[:hostname_for_client], @peer_console )
         }
         c[:number_of_regular_command_processor].times {
-          @w << CommandProcessor.new( RegularCommandReceiverPL.instance, c[:hostname_for_client] )
+          @w << CommandProcessor.new( RegularCommandReceiverPL.instance, c[:hostname_for_client], @peer_console )
         }
-        c[:number_of_basket_status_query_db].times { @w << BasketStatusQueryDB.new() }
-        c[:number_of_csm_controller].times      { @w << CsmController.new( c ) }
-        c[:number_of_udp_response_sender].times  { @w << UdpResponseSender.new( UdpResponseSenderPL.instance, c[:multicast_if] ) }
+        c[:number_of_basket_status_query_db].times { @w << BasketStatusQueryDB.new( @peer_console ) }
+        c[:number_of_csm_controller].times      { @w << CsmController.new( c, @peer_console ) }
         c[:number_of_tcp_response_sender].times  { @w << TcpResponseSender.new( TcpResponseSenderPL.instance ) }
-        c[:number_of_multicast_command_sender].times {
-          @w << MulticastCommandSender.new( c[:multicast_address], c[:gateway_udp_command_port], c[:multicast_if] )
-        }
         c[:number_of_replication_db_client].times {
           @w << ReplicationDBClient.new( c[:replication_udp_command_port], c[:multicast_if] )
         }
@@ -219,31 +181,6 @@ module Castoro
    ########################################################################
    # Command receiver workers
    ########################################################################
-
-      class UdpCommandReceiver < Worker
-        def initialize( pipeline, port, multicast_address, multicast_if )
-          @pipeline = pipeline
-          @socket = ExtendedUDPSocket.new multicast_if
-          @socket.bind( multicast_address, port )
-          super
-        end
-
-        def serve
-          channel = UdpServerChannel.new
-          ticket = CommandReceiverTicketPool.instance.create_ticket
-          channel.receive( @socket, ticket )
-          ticket.channel = channel
-          ticket.socket = nil
-          ticket.mark
-          @pipeline.enq ticket
-        end
-
-        def graceful_stop
-          finished
-          super
-        end
-      end
-
 
       class TcpCommandAcceptor < Worker
         def initialize( pipeline, port )
@@ -330,10 +267,11 @@ module Castoro
 
 
       class CommandProcessor < Worker
-        def initialize( pipeline, hostname_for_client )
+        def initialize( pipeline, hostname_for_client, peer_console )
           @pipeline = pipeline
           super
           @hostname = hostname_for_client
+          @peer_console = peer_console
         end
 
         def serve
@@ -352,10 +290,9 @@ module Castoro
             if ( File.exist? path_a )
               basket_text = basket.to_s
               ticket.push Hash[ 'basket', basket_text, 'paths', { ticket.host => path_a } ]
-              ResponseSenderPL.instance.enq ticket
-              t = MulticastCommandSenderTicketPool.instance.create_ticket
-              t.push( 'INSERT', Hash[ 'basket', basket_text, 'host', ticket.host, 'path', path_a ] )
-              MulticastCommandSenderPL.instance.enq t
+              # ResponseSenderPL.instance.enq ticket
+              TcpResponseSenderPL.instance.enq ticket # when udp, code that cannot reach.
+              @peer_console.publish_insert_packet basket.to_s
             else
               ticket.mark
               if ( ticket.channel.tcp? )
@@ -373,7 +310,8 @@ module Castoro
             end
           when 'NOP'
             ticket.push Hash[]
-            ResponseSenderPL.instance.enq ticket
+            # ResponseSenderPL.instance.enq ticket
+            TcpResponseSenderPL.instance.enq ticket # when udp, code that cannot reach.
           when 'INSERT'
             # Todo: Do nothing
           when 'DROP'
@@ -413,13 +351,19 @@ module Castoro
           end
         rescue => e
           ticket.push e
-          ResponseSenderPL.instance.enq ticket
+          # ResponseSenderPL.instance.enq ticket
+          TcpResponseSenderPL.instance.enq ticket # when udp, code that cannot reach.
         end
       end
 
 
       # Todo: BasketStatusQueryDB could be disolved into CommandProcessor
       class BasketStatusQueryDB < Worker
+        def initialize peer_console
+          super()
+          @peer_console = peer_console
+        end
+
         def serve
           ticket = BasketStatusQueryDatabasePL.instance.deq
           b = ticket.basket
@@ -486,23 +430,24 @@ module Castoro
           CsmControllerPL.instance.enq ticket
 
         rescue NotFoundError => e
-          t = MulticastCommandSenderTicketPool.instance.create_ticket
-          t.push( 'DROP', Hash[ 'basket', b.to_s, 'host', ticket.host, 'path', b.path_a ] )
-          MulticastCommandSenderPL.instance.enq t
+          @peer_console.publish_drop_packet b.to_s
           ticket.push e
-          ResponseSenderPL.instance.enq ticket
+          # ResponseSenderPL.instance.enq ticket
+          TcpResponseSenderPL.instance.enq ticket # when udp, code that cannot reach.
         rescue => e
           ticket.push e
-          ResponseSenderPL.instance.enq ticket
+          # ResponseSenderPL.instance.enq ticket
+          TcpResponseSenderPL.instance.enq ticket # when udp, code that cannot reach.
         end
       end
 
 
       # Todo: CsmController could be also disolved into CommandProcessor
       class CsmController < Worker
-        def initialize config
+        def initialize config, peer_console
           super()
           @csm_executor = Csm::Client.new config
+          @peer_console = peer_console
         end
 
         def serve
@@ -522,28 +467,26 @@ module Castoro
             h.merge! Hash[ 'host', ticket.host, 'path', basket.path_w ]
           when :DELETE
             m = "DELETE: #{basket} #{basket.path_d}"
-            t = MulticastCommandSenderTicketPool.instance.create_ticket
-            t.push( 'DROP', Hash[ 'basket', basket.to_s, 'host', ticket.host, 'path', basket.path_d ] )
-            MulticastCommandSenderPL.instance.enq t
+            @peer_console.publish_drop_packet basket.to_s
             ReplicationPL.instance.enq [ 'delete', basket ]  # Todo: should not use DB's enum here
           when :CANCEL
             m = "CANCEL: #{basket} #{basket.path_c}"
           when :FINALIZE
             m = "FINALIZE: #{basket} #{basket.path_a}"
-            t = MulticastCommandSenderTicketPool.instance.create_ticket
-            t.push( 'INSERT', Hash[ 'basket', basket.to_s, 'host', ticket.host, 'path', basket.path_a ] )
-            MulticastCommandSenderPL.instance.enq t
+            @peer_console.publish_insert_packet basket.to_s
             ReplicationPL.instance.enq [ 'replicate', basket ]  # Todo: should not use DB's enum here
           else
             raise InternalServerError, "Unknown command symbol' #{ticket.command_sym.inspect}"
           end
           ticket.message = m
           ticket.push h
-          ResponseSenderPL.instance.enq ticket
+          # ResponseSenderPL.instance.enq ticket
+          TcpResponseSenderPL.instance.enq ticket # when udp, code that cannot reach.
         rescue => e
           Log.err e
           ticket.push e
-          ResponseSenderPL.instance.enq ticket
+          # ResponseSenderPL.instance.enq ticket
+          TcpResponseSenderPL.instance.enq ticket # when udp, code that cannot reach.
         end
       end
 
@@ -587,34 +530,10 @@ module Castoro
         end
       end
 
-      class UdpResponseSender < ResponseSender
-        def initialize( pipeline, multicast_if )
-          @socket = ExtendedUDPSocket.new multicast_if
-          super pipeline
-        end
-      end
-
-
       class TcpResponseSender < ResponseSender
         def initialize( pipeline )
           @socket = nil
           super
-        end
-      end
-
-
-      class MulticastCommandSender < Worker
-        def initialize( ip, port, multicast_if )
-          @channel = UdpMulticastClientChannel.new( ExtendedUDPSocket.new multicast_if )
-          @ip, @port = ip, port
-          super
-        end
-
-        def serve
-          ticket = MulticastCommandSenderPL.instance.deq
-          command, args = ticket.pop2
-          @channel.send( command, args, @ip, @port )
-          MulticastCommandSenderTicketPool.instance.delete( ticket )
         end
       end
 

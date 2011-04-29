@@ -7,6 +7,7 @@
 ** It integrated it into castoro-peer.
 ** The means of communication is changed to dRuby.
 * RSpec 2.x compatibility changes.
+* Added command castoro-peer
 
 === 0.0.21 2010-12-21
 

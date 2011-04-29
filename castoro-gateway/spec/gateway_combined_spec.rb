@@ -134,8 +134,8 @@ describe Castoro::Gateway do
   end
   
   it "should not respond to an unexpeced command." do
-    mkdir = Castoro::Protocol::Command::Mkdir.new 1, 2, 3, 4
-    res = @client.send @udp_header, mkdir
+    delete = Castoro::Protocol::Command::Delete.new "1.2.3"
+    res = @client.send @udp_header, delete
     res.should be_nil
   end
 

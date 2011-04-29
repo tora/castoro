@@ -6,6 +6,7 @@
 * Removed Castoro::Protocol::{Mv,Mkdir]
 * Removed Castoro::Sender::TCP#send_and_recv_stream
 * RSpec 2.x compatibility changes.
+* Added Workers#broadcast
 
 === 0.0.15 2011-03-23
 

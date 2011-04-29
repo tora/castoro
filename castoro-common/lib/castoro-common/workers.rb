@@ -106,6 +106,13 @@ module Castoro
     #
     def alive?; !! @threads; end
 
+    # notify broadcast for worker threads.
+    #
+    def broadcast
+      raise WorkersError, "#{@name} is stopped." unless alive?
+      @threads.each { |t| t.wakeup }
+    end
+
     private
 
     ##
