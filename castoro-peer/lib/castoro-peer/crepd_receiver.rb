@@ -35,14 +35,20 @@ module Castoro
   module Peer
     
     class TCPReplicationServer < PreThreadedTcpServer
-      def initialize( config, port, host = '0.0.0.0', maxConnections = 20  )
-        super
+      def initialize( config, port, replication_sender_queue, host = '0.0.0.0', max_connections = 20 )
+        super(config, port, host, max_connections)
+
         @peer_console = DRbObject.new_with_uri "druby://127.0.0.1:#{config[:peer_console_port]}"
+        @replication_sender_queue = replication_sender_queue
       end
 
       def serve( io )
         channel = TcpServerChannel.new
-        processor = ReplicationReceiverImplementation.new( channel, io, @config, @peer_console )
+        processor = ReplicationReceiverImplementation.new(channel,
+                                                          io,
+                                                          @config,
+                                                          @peer_console,
+                                                          @replication_sender_queue)
         begin
           processor.run
         rescue => e
@@ -53,9 +59,10 @@ module Castoro
     end
 
     class ReplicationReceiverImplementation
-      def initialize( channel, io, config, peer_console )
+      def initialize( channel, io, config, peer_console, replication_sender_queue )
         @config = config
         @peer_console = peer_console
+        @replication_sender_queue = replication_sender_queue
 
         @channel, @io = channel, io
         @directory_entries = []
@@ -287,7 +294,7 @@ module Castoro
             raise RetryableError, "#{e.class} #{e.message} for #{@basket} #{@path_r} #{@path_a}"
           end
         end
-        Log.notice( "CANCELD: #{@basket} #{@path_r} from #{@ip}:#{@port}" )
+        Log.notice( "CANCELED: #{@basket} #{@path_r} from #{@ip}:#{@port}" )
       end
 
       def process_finalize_command
@@ -313,10 +320,7 @@ module Castoro
         rescue => e
           Log.warning e, "#{file} #{@basket.to_s}"
         end
-        queue = $ReplicationSenderQueue
-        if ( queue )
-          queue.enq "#{@basket.to_s}.#{action}"
-        end
+        @replication_sender_queue.enq "#{@basket.to_s}.#{action}"
       end
 
     end

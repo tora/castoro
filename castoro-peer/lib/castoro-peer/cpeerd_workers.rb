@@ -46,9 +46,6 @@ module Castoro
       attr_accessor :socket, :channel, :command, :command_sym, :args, :basket, :host, :message
     end
 
-    class CommandSenderTicket < Ticket
-    end
-
 ########################################################################
 # Ticket Pools
 ########################################################################
@@ -61,20 +58,6 @@ module Castoro
         super( CommandReceiverTicket )
       end
     end
-
-#    class RegularCommandReceiverTicketPool < SingletonTicketPool
-#      def fullname; 'Regular command receiver ticket pool' ; end
-#      def nickname; 'rcr' ; end
-#
-#      def create_ticket
-#        super( CommandReceiverTicket )
-#      end
-#    end
-
-#    class ExpressCommandReceiverTicketPool < RegularCommandReceiverTicketPool
-#      def fullname; 'Express command receiver ticket pool' ; end
-#      def nickname; 'ecr' ; end
-#    end
 
 ########################################################################
 # Pipelines
@@ -299,12 +282,12 @@ module Castoro
                 raise NotFoundError, path_a 
               else
                 ticket.finish
-                Log.debug( "Get received, but not found: #{basket_text}" ) if $DEBUG
+                Log.debug( "Get received, but not found: #{basket_text}" )
                 #########
                 ####  basket id is required
                 #########
                 Log.debug( sprintf( "%s %.1fms [%s] %s is not found", ticket.command.slice(0,3), ticket.duration * 1000, 
-                                    ( ticket.durations.map { |x| "%.1f" % (x * 1000) } ).join(', '), basket_text ) ) if $DEBUG
+                                    ( ticket.durations.map { |x| "%.1f" % (x * 1000) } ).join(', '), basket_text ) )
                 CommandReceiverTicketPool.instance.delete( ticket )
               end
             end
@@ -524,7 +507,7 @@ module Castoro
           Log.notice( sprintf( "%s %s:%d %.1fms", message, ip, port, ticket.duration * 1000 ) ) if message
           command = ticket.command
           Log.debug( sprintf( "%s %.1fms [%s] %s", ticket.command.slice(0,3), ticket.duration * 1000, 
-                              ( ticket.durations.map { |x| "%.1f" % (x * 1000) } ).join(', '), basket_text ) ) if $DEBUG
+                              ( ticket.durations.map { |x| "%.1f" % (x * 1000) } ).join(', '), basket_text ) )
         ensure
           CommandReceiverTicketPool.instance.delete( ticket ) if ticket
         end

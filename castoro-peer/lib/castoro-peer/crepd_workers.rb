@@ -24,7 +24,6 @@ require 'castoro-peer/server_status'
 require 'castoro-peer/maintenace_server'
 require 'castoro-peer/crepd_sender'
 require 'castoro-peer/scheduler'
-require 'castoro-peer/pipeline'
 
 module Castoro
   module Peer
@@ -37,18 +36,16 @@ module Castoro
     DIR_PROCESSING  = "#{DIR_REPLICATION}/processing"
     DIR_SLEEPING    = "#{DIR_REPLICATION}/sleeping"
 
-    $ReplicationSenderQueue = nil
-
 ########################################################################
 # Controller of the replication workers
 ########################################################################
 
     class ReplicationWorkers
 
-      def initialize config
+      def initialize config, replication_sender_queue
         c = @config = config
         @w = []
-        $ReplicationSenderQueue = queue = Pipeline.new
+        queue = @replication_sender_queue = replication_sender_queue
         @w << UdpReplicationInternalCommandReceiver.new( queue, c[:replication_udp_command_port], c[:multicast_if] )
         @w << ReplicationSenderManager.new( queue )
         c[:number_of_replication_sender].times { @w << ReplicationSender.new( queue, c ) }

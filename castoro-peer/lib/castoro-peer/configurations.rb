@@ -64,7 +64,6 @@ module Castoro
         'number_of_replication_db_client'     => 1,
         'number_of_replication_sender'        => 3,
 
-        'period_of_alive_packet_sender'       => 4,
         'period_of_statistics_logger'         => 60,
 
         'dir_w_user'                          => 'castoro',
@@ -221,7 +220,6 @@ module Castoro
         positive_num_check :number_of_replication_db_client
         positive_num_check :number_of_replication_sender
 
-        positive_num_check :period_of_alive_packet_sender
         positive_num_check :period_of_statistics_logger
 
         positive_num_check :replication_transmission_datasize

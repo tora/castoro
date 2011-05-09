@@ -57,7 +57,7 @@ module Castoro #:nodoc:
             user  = config[:dir_w_user]
             group = config[:dir_w_group]
 
-            Log.debug "CSM: MKDIR - #{mode},#{user},#{group},#{src}" if $DEBUG
+            Log.debug "CSM: MKDIR - #{mode},#{user},#{group},#{src}"
             front.mkdir src, mode, user, group
           }
         end
@@ -73,7 +73,7 @@ module Castoro #:nodoc:
             user  = config[:dir_d_user]
             group = config[:dir_d_group]
 
-            Log.debug "CSM: MOVE  - #{mode},#{user},#{group},#{src},#{dst}" if $DEBUG
+            Log.debug "CSM: MOVE  - #{mode},#{user},#{group},#{src},#{dst}"
             front.move src, dst, mode, user, group
           }
         end
@@ -89,7 +89,7 @@ module Castoro #:nodoc:
             user  = config[:dir_c_user]
             group = config[:dir_c_group]
 
-            Log.debug "CSM: MOVE  - #{mode},#{user},#{group},#{src},#{dst}" if $DEBUG
+            Log.debug "CSM: MOVE  - #{mode},#{user},#{group},#{src},#{dst}"
             front.move src, dst, mode, user, group
           }
         end
@@ -105,7 +105,7 @@ module Castoro #:nodoc:
             user  = config[:dir_a_user]
             group = config[:dir_a_group]
 
-            Log.debug "CSM: MOVE  - #{mode},#{user},#{group},#{src},#{dst}" if $DEBUG
+            Log.debug "CSM: MOVE  - #{mode},#{user},#{group},#{src},#{dst}"
             front.move src, dst, mode, user, group
           }
         end
@@ -120,7 +120,7 @@ module Castoro #:nodoc:
             user  = Process.euid
             group = Process.egid
 
-            Log.debug "CSM: MKDIR - #{mode},#{user},#{group},#{src}" if $DEBUG
+            Log.debug "CSM: MKDIR - #{mode},#{user},#{group},#{src}"
             front.mkdir src, mode, user, group
           }
         end

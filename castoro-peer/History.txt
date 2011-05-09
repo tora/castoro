@@ -8,6 +8,7 @@
 ** The means of communication is changed to dRuby.
 * RSpec 2.x compatibility changes.
 * Added command castoro-peer
+* refactored method of executing Log#debug
 
 === 0.0.21 2010-12-21
 

@@ -20,6 +20,7 @@
 require 'castoro-peer/main'
 require 'castoro-peer/crepd_workers'
 require 'castoro-peer/crepd_receiver'
+require 'castoro-peer/pipeline'
 
 module Castoro
   module Peer
@@ -27,8 +28,11 @@ module Castoro
     class CrepdMain < Main
       def initialize
         super
-        @w = ReplicationWorkers.new @config
-        @r = TCPReplicationServer.new @config, @config[:replication_tcp_communication_port]
+        replication_sender_queue = Castoro::Peer::Pipeline.new
+        @w = ReplicationWorkers.new @config, replication_sender_queue
+        @r = TCPReplicationServer.new @config,
+                                      @config[:replication_tcp_communication_port],
+                                      replication_sender_queue
       end
 
       def start
