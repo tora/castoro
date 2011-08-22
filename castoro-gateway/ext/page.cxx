@@ -75,7 +75,7 @@ void CachePage::init(const BasketId& id, uint32_t type)
   memset(m_peers, 0, sizeof(m_peers));
   m_contains = 0;
 
-  BasketId mask(0xffffffffffffffff, ~(CACHEPAGE_SIZE-1));
+  BasketId mask(0xffffffffffffffffll, ~(CACHEPAGE_SIZE-1));
   m_magic.basket_id = id & mask;
   m_magic.type = type;
 }

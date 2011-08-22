@@ -23,7 +23,7 @@ public:
   inline BasketId(VALUE num) {
     num = rb_funcall(num, rb_intern("to_i"), 0);
     this->_higher = NUM2ULL(rb_funcall(num, rb_intern(">>"), 1, INT2NUM(64)));
-    this->_lower = NUM2ULL(rb_funcall(num, rb_intern("&"), 1, ULL2NUM(0xFFFFFFFFFFFFFFFF)));
+    this->_lower = NUM2ULL(rb_funcall(num, rb_intern("&"), 1, ULL2NUM(0xFFFFFFFFFFFFFFFFll)));
   }
   inline ~BasketId() {}
   inline BasketId(const BasketId& other) {
