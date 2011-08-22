@@ -1,7 +1,5 @@
-# RUBYLIB = /usr/local/lib
-# RUBYINC = /usr/local/include/ruby
-RUBYLIB = /home/sakaguchi/.rvm/rubies/ruby-1.9.2-p180/lib
-RUBYINC = /home/sakaguchi/.rvm/rubies/ruby-1.9.2-p180/include/ruby-1.9.1
+RUBYLIB = /usr/local/lib
+RUBYINC = /usr/local/include/ruby
 
 CXX = g++
 
