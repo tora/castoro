@@ -19,6 +19,7 @@
  */
 
 #include "cache.hxx"
+#include "basket.hxx"
 
 static VALUE rb_cCastoro, rb_cCache, rb_cPeers, rb_cPeer;
 static ID operator_bracket = 0;
@@ -122,7 +123,8 @@ VALUE Cache::rb_find(VALUE self, VALUE _c, VALUE _t, VALUE _r)
   ArrayOfPeerWithBase a;
   bool removed = false;
 
-  get_self(self)->find(NUM2ULL(_c), NUM2INT(_t), NUM2INT(_r), a, removed);
+  BasketId id(_c);
+  get_self(self)->find(id, NUM2INT(_t), NUM2INT(_r), a, removed);
   if(removed) return Qnil;
 
   VALUE result = rb_class_new_instance(0, &stub, rb_cArray);
@@ -176,9 +178,9 @@ public:
   };
   virtual inline ~Dumper() {};
 
-  virtual bool operator()(uint64_t cid, uint32_t typ, uint32_t rev, ID peer, ID base) {
+  virtual bool operator()(const BasketId& id, uint32_t typ, uint32_t rev, ID peer, ID base) {
     rb_funcall(self, operator_member_puts, 6,
-              f, ID2SYM(peer), ID2SYM(base), ULL2NUM(cid), LONG2FIX(typ), LONG2FIX(rev));
+              f, ID2SYM(peer), ID2SYM(base), id.to_num(), LONG2FIX(typ), LONG2FIX(rev));
     return true;
   };
 
@@ -262,7 +264,8 @@ VALUE Peer::define_class(VALUE _p)
 VALUE Peer::rb_insert(VALUE self, VALUE _c, VALUE _t, VALUE _r, VALUE _b)
 {
   Peer* p = get_self(self);
-  p->m_cache->insert(NUM2ULL(_c), NUM2INT(_t), NUM2INT(_r), p->m_peer, rb_to_id(_b));
+  BasketId id(_c);
+  p->m_cache->insert(id, NUM2INT(_t), NUM2INT(_r), p->m_peer, rb_to_id(_b));
   return Qnil;
 }
 
@@ -270,7 +273,8 @@ VALUE Peer::rb_insert(VALUE self, VALUE _c, VALUE _t, VALUE _r, VALUE _b)
 VALUE Peer::rb_remove(VALUE self, VALUE _c, VALUE _t, VALUE _r)
 {
   Peer* p = get_self(self);
-  p->m_cache->remove(NUM2ULL(_c), NUM2INT(_t), NUM2INT(_r), p->m_peer);
+  BasketId id(_c);
+  p->m_cache->remove(id, NUM2INT(_t), NUM2INT(_r), p->m_peer);
   return Qnil;
 }
 
