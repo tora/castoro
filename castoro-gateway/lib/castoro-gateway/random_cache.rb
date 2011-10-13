@@ -1,4 +1,3 @@
-#
 #   Copyright 2010 Ricoh Company, Ltd.
 #
 #   This file is part of Castoro.
@@ -19,9 +18,17 @@
 
 require "castoro-gateway"
 
+require "forwardable"
 require "monitor"
 
 module Castoro
+
+  ##
+  # Substitutes for cache made by C++
+  #
+  # It is having structure strong against random access. 
+  # However, there is much memory usage and its space efficiency is bad. 
+  #
   class RandomCache
     PAGE_SIZE               = 32768
     DSTAT_CACHE_EXPIRE      = 1
@@ -38,45 +45,91 @@ module Castoro
     attr_accessor :watchdog_limit
     attr_reader :peers
 
+    ##
+    # Initialize.
+    #
+    # === Args
+    #
+    # +page+:: page size
+    #
     def initialize page
       raise ArgumentError, "Page size must be > 0." unless page > 0
       @page           = page
       @watchdog_limit = 15
-      @peers          = Peers.new(self)
+      @map            = Map.new(page * 2**12)
+      @peers          = Peers.new(self, @map)
       @finds          = 0
       @hits           = 0
     end
+
+    ##
+    # A cache element is searched.
+    #
+    # The arrangement of the NFS path of an object element is returned. 
+    #
+    # === Args
+    #
+    # +id+    :: Basket Id
+    # +type+  :: Basket Type
+    # +rev+   :: Basket Revision
+    #
     def find id, type, rev
       @finds += 1
-      expired = Time.now.to_i - @cache.watchdog_limit
-      @peers.map { |k,v|
-        if v.alive?(expired)
-          v.get(id, type, rev) { |peer, base|
-            make_nfs_path peer, base, id, type, rev
-          }
-        end
+      expired = Time.now.to_i - @watchdog_limit
+      (@map.get(id, type, rev) || {}).map { |k,v|
+        make_nfs_path(k, v, id, type, rev) if @peers[k].alive?(expired)
       }.compact.tap { |ret|
         @hits += 1 unless ret.empty?
       }
     end
+
+    ##
+    # cache status is returned.
+    #
+    # === Args
+    #
+    # +key+ :: status key
+    #
     def stat key
       case key
         when DSTAT_CACHE_EXPIRE     ; @watchdog_limit
         when DSTAT_CACHE_REQUESTS   ; @finds
         when DSTAT_CACHE_HITS       ; @hits
-        when DSTAT_CACHE_COUNT_CLEAR; (@hits * 1000 / @finds).tap { |ret| @finds = @hits = 0 }
+        when DSTAT_CACHE_COUNT_CLEAR; (@finds == 0 ? 0 : @hits * 1000 / @finds).tap { |ret| @finds = @hits = 0 }
         when DSTAT_ALLOCATE_PAGES   ; @page
-        when DSTAT_FREE_PAGES       ; 0 # TODO:not implemented DSTAT_FREE_PAGES
-        when DSTAT_ACTIVE_PAGES     ; 0 # TODO:nto implemented DSTAT_ACTIVE_PAGES
-        when DSTAT_HAVE_STATUS_PEERS; @peers.count { |p| p.has_status? }
-        when DSTAT_ACTIVE_PEERS     ; @peers.count { |p| p.writable? }
-        when DSTAT_READABLE_PEERS   ; @peers.count { |p| p.readable? }
+        when DSTAT_FREE_PAGES       ; 0 # In RandomCache There is no concept of a page segment. 
+        when DSTAT_ACTIVE_PAGES     ; 0 # In RandomCache There is no concept of a page segment. 
+        when DSTAT_HAVE_STATUS_PEERS; @peers.count { |k,v| v.has_status? }
+        when DSTAT_ACTIVE_PEERS     ; @peers.count { |k,v| v.writable? }
+        when DSTAT_READABLE_PEERS   ; @peers.count { |k,v| v.readable? }
         else                        ; 0
       end
     end
+
+    ##
+    # Cache information is dumped.
+    #
+    # === Args
+    #
+    # +io+ :: the IO Object 
+    #
     def dump io
-      # TODO:not implemented #dump
+      @map.each { |id, type, rev, peer, base|
+        member_puts io, peer, base, id, type, rev
+      }
     end
+
+    ##
+    # A nfs path is constituted.
+    #
+    # === Args
+    #
+    # +peer+  :: peer id
+    # +base+  :: base path
+    # +id+    :: Basket Id
+    # +type+  :: Basket Type
+    # +rev+   :: Basket Revision
+    #
     def make_nfs_path peer, base, id, type, rev
       k    = id / 1000
       m, k = k.divmod 1000
@@ -90,68 +143,282 @@ module Castoro
       io.puts %[  #{peer}: #{base}/#{id}.#{type}.#{rev}]
     end
 
+    ##
+    # Set of Peer
+    #
     class Peers
+      extend Forwardable
       include Enumerable
-      def initialize cache
-        @cache = cache 
-        @peers = Hash.new { |h,k| h[k] = Peer.new k }
+
+      def_delegators :@peers, :each, :delete
+
+      ##
+      # Initialize.
+      #
+      # === Args
+      #
+      # +cache+ :: RandomCache instance.
+      # +map+   :: k-v store map instance.
+      #
+      def initialize cache, map
+        @cache = cache
+        @map   = map
+        @peers = Hash.new { |h,k| h[k] = Peer.new(@cache, @map, self, k) }
       end
+
+      ##
+      # The reference to Peer is returned.
+      #
       def [] key
-        @peers[key]
+        @peers[key.to_sym]
       end
-      def each &block
-        @peers.each &block
-      end
+
+      ##
+      # storable peer is returned.
+      #
+      # === Args
+      #
+      # +length+:: required size.
+      #
       def find length = nil
         expired = Time.now.to_i - @cache.watchdog_limit
-        @peers.select { |k,v|
-          v.alive?(expired) and v.storable?(length)
-        }.keys
+        @peers.select { |k,v| v.alive?(expired) and v.storable?(length) }.keys.map(&:to_s)
       end
     end
 
+    ##
+    # The class expressing Peer.
+    #
     class Peer
+
       attr_reader :key
-      def initialize key
-        @key                = key
+
+      ##
+      # Initialize
+      #
+      # === Args
+      #
+      # +cache+ :: RandomCache instance.
+      # +map+   :: k-v store map instance.
+      # +peers+ :: Peers instance
+      # +key+   :: Peer ID
+      #
+      def initialize cache, map, peers, key
+        @cache              = cache
+        @map                = map
+        @peers              = peers
+        @key                = key.to_sym
         @available          = 0
         @status             = 0
         @values             = {}
         @status_received_at = 0
       end
+
+      ##
+      # The element belonging to Peer is added.
+      #
+      # === Args
+      #
+      # +id+    :: Basket Id
+      # +type+  :: Basket Type
+      # +rev+   :: Basket Revision
+      # +path+  :: Basket base path.
+      #
       def insert id, type, rev, path
-        key = "#{id}:#{type}".to_sym
-        @values[key] = {:rev => rev, :path => path}
+        if (peers = @map.get id, type, rev)
+          peers[@key] = path.to_sym
+        else
+          @map.set id, type, rev, @key => path.to_sym
+        end
       end
+
+      ##
+      # The element belonging to Peer is deleted.
+      #
+      # === Args
+      #
+      # +id+    :: Basket Id
+      # +type+  :: Basket Type
+      # +rev+   :: Basket Revision
+      #
       def erase id, type, rev
-        key = "#{id}:#{type}".to_sym
-        @values.delete(key) if @values.key?(key) and @values[key][:rev] == rev
+        if (peers = @map.get id, type, rev)
+          peers.delete(@key)
+        end
       end
-      def get id, type, rev
-        key = "#{id}:#{type}".to_sym
-        yield(@key, @values[key][:path]) if @values.key?(key) and @values[key][:rev] == rev
-      end
+
+      ##
+      # Peer status is returned.
+      #
+      # see #status=
+      #
       def status
         {
           :available => @available,
           :status => @status,
         }
       end
+
+      ##
+      # Setter of status.
+      #
+      # === Args
+      #
+      # +status+::
+      #   Hash expressing status
+      #
+      # === status details
+      #
+      # Acceptance of the following key values is possible. 
+      #
+      # +:available+  :: storable capacity.
+      # +:status+     :: status code.
+      #
       def status= status
         @available = status[:available] if status.key?(:available)
         @status    = status[:status]    if status.key?(:status)
         @status_received_at = Time.now.to_i
         status
       end
+
+      ##
+      # Remove Peer.
+      #
+      def remove
+        @peers.delete(@key)
+      end
+
+      ##
+      # It is returned whether has status or not. 
+      #
       def has_status?; @status > 0; end
+
+      ##
+      # It is returned whether writing is possible.
+      #
       def writable?; @status >= 30; end
+
+      ##
+      # It is returned whether reading is possible.
+      #
       def readable?; @status >= 20; end
+
+      ##
+      # It is returned whether new Basket is storable. 
+      #
       def storable? length
         return true unless length
         self.writable? and @available > length
       end
+
+      ##
+      # It is returned whether has vital reaction or not.
+      # 
+      # === Args
+      #
+      # +expire+::
+      #   expiration time
+      #
       def alive? expire
         @status_received_at >= expire
+      end
+    end
+
+    ##
+    # Key-Value Store which considered BasketRevision.
+    #
+    class Map
+      ##
+      # Initialize.
+      #
+      # === Args
+      #
+      # +size+::
+      #   max size of basketkey count.
+      #
+      def initialize size
+        @size = size
+        @map = {}
+      end
+
+      ##
+      # get value.
+      #
+      # Hash of peer-path pair is returned.
+      #
+      # === Args
+      #
+      # +id+::
+      #   BasketId
+      # +type+::
+      #   BasketType
+      # +rev+::
+      #   BasketRevision
+      #
+      def get id, type, rev
+        k, r = to_keys id, type, rev
+        return nil unless (val = @map[k])
+        return nil unless val[:rev] == r
+        val[:peers]
+      end
+
+      ##
+      # set value.
+      #
+      # === Args
+      #
+      # +id+::
+      #   BasketId
+      # +type+::
+      #   BasketType
+      # +rev+::
+      #   BasketRevision
+      # +peers+::
+      #   Hash of peer-path pair
+      #
+      def set id, type, rev, peers
+        k, r = to_keys id, type, rev
+        @map[k] = {:rev => r, :peers => peers}
+        while @map.size > @size
+          @map.delete(@map.keys.first)
+        end
+        peers
+      end
+
+      ##
+      # #each
+      #
+      # Block receives 5 arguments.
+      #
+      # == Block arguments
+      #
+      # +id+::
+      #   BasketId
+      # +type+::
+      #   BasketType
+      # +rev+::
+      #   BasketRevision
+      # +peer+::
+      #   Peer ID
+      # +base+::
+      #   stored path for peer
+      #
+      def each
+        @map.each { |k,v|
+          id, type = k.to_s.split(':', 2)
+          rev      = v[:rev]
+          peers    = v[:peers]
+          peers.each { |peer, base|
+            yield [id, type, rev, peer, base]
+          }
+        }
+        self
+      end
+
+      private
+
+      def to_keys id, type, rev; 
+        ["#{id}:#{type}".to_sym, (rev & 255).to_s.to_sym]
       end
     end
   end

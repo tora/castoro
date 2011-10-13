@@ -28,6 +28,7 @@ require 'castoro-gateway/version'
 
 spec = Gem::Specification.new do |s|
   s.name = 'castoro-gateway'
+  s.authors = ['castoro project']
   s.version = Castoro::Gateway::Version::STRING
   s.has_rdoc = true
   s.extra_rdoc_files = ['README.textile']
