@@ -20,6 +20,8 @@ require "castoro-gateway"
 
 require "forwardable"
 require "monitor"
+require 'kyotocabinet'
+require 'msgpack'
 
 module Castoro
 
@@ -227,6 +229,7 @@ module Castoro
       def insert id, type, rev, path
         if (peers = @map.get id, type, rev)
           peers[@key] = path.to_sym
+          @map.set id, type, rev, peers
         else
           @map.set id, type, rev, @key => path.to_sym
         end
@@ -243,7 +246,8 @@ module Castoro
       #
       def erase id, type, rev
         if (peers = @map.get id, type, rev)
-          peers.delete(@key)
+          peers.delete(@key.to_s)
+          @map.set id, type, rev, peers
         end
       end
 
@@ -338,7 +342,11 @@ module Castoro
       #
       def initialize size
         @size = size
-        @map = {}
+        @db = KyotoCabinet::DB.new
+        @db.open('*', KyotoCabinet::DB::OWRITER |
+                      KyotoCabinet::DB::OCREATE |
+                      KyotoCabinet::DB::OTRUNCATE
+                )
       end
 
       ##
@@ -357,9 +365,10 @@ module Castoro
       #
       def get id, type, rev
         k, r = to_keys id, type, rev
-        return nil unless (val = @map[k])
-        return nil unless val[:rev] == r
-        val[:peers]
+        return nil unless (val = @db.get(k))
+        val = MessagePack.unpack(val)
+        return nil unless val['rev'] == r
+        val['peers']
       end
 
       ##
@@ -378,9 +387,10 @@ module Castoro
       #
       def set id, type, rev, peers
         k, r = to_keys id, type, rev
-        @map[k] = {:rev => r, :peers => peers}
-        while @map.size > @size
-          @map.delete(@map.keys.first)
+        if (peers || {}).empty?
+          @db.remove(k)
+        else
+          @db.set(k, {'rev' => r, 'peers' => peers}.to_msgpack)
         end
         peers
       end
@@ -404,21 +414,34 @@ module Castoro
       #   stored path for peer
       #
       def each
-        @map.each { |k,v|
-          id, type = k.to_s.split(':', 2)
-          rev      = v[:rev]
-          peers    = v[:peers]
-          peers.each { |peer, base|
-            yield [id, type, rev, peer, base]
-          }
+        open_cursor { |cur|
+          while rec = cur.get(true)
+            k, v = rec.map { |r| MessagePack.unpack(r) }
+            id, type = k.to_s.split(':', 2)
+            rev      = v['rev']
+            peers    = v['peers']
+            peers.each { |peer, base|
+              yield [id, type, rev, peer, base]
+            }
+          end
         }
         self
       end
 
       private
 
-      def to_keys id, type, rev; 
-        ["#{id}:#{type}".to_sym, (rev & 255).to_s.to_sym]
+      def to_keys id, type, rev
+        ["#{id}:#{type}".to_msgpack, rev & 255]
+      end
+
+      def open_cursor
+        cur = @db.cursor
+        cur.jump
+        begin
+          yield cur         
+        ensure
+          cur.disable
+        end
       end
     end
   end
