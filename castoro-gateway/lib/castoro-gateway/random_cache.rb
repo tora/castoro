@@ -52,13 +52,12 @@ module Castoro
     #
     # === Args
     #
-    # +page+:: page size
+    # +size+:: cache size
     #
-    def initialize page
-      raise ArgumentError, "Page size must be > 0." unless page > 0
-      @page           = page
+    def initialize size
+      raise ArgumentError, "Cache size must be > 0." unless size > 0
       @watchdog_limit = 15
-      @map            = Map.new(page * 2**12)
+      @map            = Map.new(size)
       @peers          = Peers.new(self, @map)
       @finds          = 0
       @hits           = 0
@@ -98,7 +97,7 @@ module Castoro
         when DSTAT_CACHE_REQUESTS   ; @finds
         when DSTAT_CACHE_HITS       ; @hits
         when DSTAT_CACHE_COUNT_CLEAR; (@finds == 0 ? 0 : @hits * 1000 / @finds).tap { |ret| @finds = @hits = 0 }
-        when DSTAT_ALLOCATE_PAGES   ; @page
+        when DSTAT_ALLOCATE_PAGES   ; 0 # In RandomCache There is no concept of a page segment. 
         when DSTAT_FREE_PAGES       ; 0 # In RandomCache There is no concept of a page segment. 
         when DSTAT_ACTIVE_PAGES     ; 0 # In RandomCache There is no concept of a page segment. 
         when DSTAT_HAVE_STATUS_PEERS; @peers.count { |k,v| v.has_status? }
@@ -338,15 +337,11 @@ module Castoro
       # === Args
       #
       # +size+::
-      #   max size of basketkey count.
+      #   cache size.
       #
       def initialize size
-        @size = size
         @db = KyotoCabinet::DB.new
-        @db.open('*', KyotoCabinet::DB::OWRITER |
-                      KyotoCabinet::DB::OCREATE |
-                      KyotoCabinet::DB::OTRUNCATE
-                )
+        @db.open("*#capsiz=#{size}")
       end
 
       ##
@@ -414,16 +409,14 @@ module Castoro
       #   stored path for peer
       #
       def each
-        open_cursor { |cur|
-          while rec = cur.get(true)
-            k, v = rec.map { |r| MessagePack.unpack(r) }
-            id, type = k.to_s.split(':', 2)
-            rev      = v['rev']
-            peers    = v['peers']
-            peers.each { |peer, base|
-              yield [id, type, rev, peer, base]
-            }
-          end
+        @db.each { |kv|
+          k, v = kv.map { |r| MessagePack.unpack(r) }
+          id, type = k.to_s.split(':', 2)
+          rev      = v['rev']
+          peers    = v['peers']
+          peers.each { |peer, base|
+            yield [id, type, rev, peer, base]
+          }
         }
         self
       end
@@ -434,15 +427,6 @@ module Castoro
         ["#{id}:#{type}".to_msgpack, rev & 255]
       end
 
-      def open_cursor
-        cur = @db.cursor
-        cur.jump
-        begin
-          yield cur         
-        ensure
-          cur.disable
-        end
-      end
     end
   end
 end

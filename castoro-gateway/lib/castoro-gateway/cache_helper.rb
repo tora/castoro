@@ -28,11 +28,16 @@ module Castoro
       @return_peer_number = config["return_peer_number"]
       @filter             = eval(config["filter"].to_s) || Proc.new{ |peers| peers }
 
-      @cache_class = config["random_cache"] ? RandomCache : Cache
-
-      page_num = (config["cache_size"] / @cache_class::PAGE_SIZE).ceil
+      if config["random_cache"]
+        @cache_class = RandomCache
+        @cache = @cache_class.new config["cache_size"]
+      else
+        @cache_class = Cache
+        page_num = [(config["cache_size"] / @cache_class::PAGE_SIZE).ceil, 1].max
+        @cache = @cache_class.new page_num
+      end
       @locker  = Monitor.new
-      @cache   = @cache_class.new page_num
+
       @cache.watchdog_limit = config["watchdog_limit"].to_i
       @weight  = weighting_coefficient @return_peer_number
     end
