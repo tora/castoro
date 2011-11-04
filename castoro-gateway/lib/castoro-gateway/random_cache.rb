@@ -77,8 +77,9 @@ module Castoro
     def find id, type, rev
       @finds += 1
       expired = Time.now.to_i - @watchdog_limit
-      (@map.get(id, type, rev) || {}).map { |k,v|
-        make_nfs_path(k, v, id, type, rev) if @peers[k].alive?(expired)
+      (@map.get(id, type, rev) || {}).map { |kv|
+        peer, base = kv.map { |x| ObjectSpace._id2ref(x) }
+        make_nfs_path(peer, base, id, type, rev) if @peers[peer].alive?(expired)
       }.compact.tap { |ret|
         @hits += 1 unless ret.empty?
       }
@@ -192,8 +193,6 @@ module Castoro
     #
     class Peer
 
-      attr_reader :key
-
       ##
       # Initialize
       #
@@ -208,7 +207,7 @@ module Castoro
         @cache              = cache
         @map                = map
         @peers              = peers
-        @key                = key.to_sym
+        @key                = key.to_sym.object_id
         @available          = 0
         @status             = 0
         @values             = {}
@@ -227,10 +226,10 @@ module Castoro
       #
       def insert id, type, rev, path
         if (peers = @map.get id, type, rev)
-          peers[@key] = path.to_sym
+          peers[@key] = path.to_sym.object_id
           @map.set id, type, rev, peers
         else
-          @map.set id, type, rev, @key => path.to_sym
+          @map.set id, type, rev, @key => path.to_sym.object_id
         end
       end
 
@@ -245,7 +244,7 @@ module Castoro
       #
       def erase id, type, rev
         if (peers = @map.get id, type, rev)
-          peers.delete(@key.to_s)
+          peers.delete(@key)
           @map.set id, type, rev, peers
         end
       end
@@ -288,7 +287,7 @@ module Castoro
       # Remove Peer.
       #
       def remove
-        @peers.delete(@key)
+        @peers.delete(ObjectSpace._id2ref(@key))
       end
 
       ##
@@ -414,7 +413,8 @@ module Castoro
           id, type = k.to_s.split(':', 2)
           rev      = v['rev']
           peers    = v['peers']
-          peers.each { |peer, base|
+          peers.each { |pb|
+            peer, base = pb.map { |x| ObjectSpace._id2ref(x) }
             yield [id, type, rev, peer, base]
           }
         }
